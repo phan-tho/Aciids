@@ -27,9 +27,10 @@ class CIFAR10(data.Dataset):
         self.root = root
         self.transform = transform
         self.target_transform = target_transform
-        self.train = train  # training set or test set
-        self.valid = valid  # True: validation set
+        self.train = train      # True = train set, False = test set
+        self.valid = valid      # True = valid set, False = train set
         self.num_valid = num_valid
+        self.num_classes = 10
         np.random.seed(seed)
         if download:
             self.download()
@@ -48,19 +49,27 @@ class CIFAR10(data.Dataset):
                 self.labels += entry['labels']
             self.data = np.concatenate(self.data)
             self.data = self.data.reshape((50000, 3, 32, 32)).transpose((0, 2, 3, 1)) # HWC
+            labels_np = np.array(self.labels)
 
-            # Split valid/train set
-            indices = np.arange(50000)
-            np.random.shuffle(indices)
-            valid_indices = indices[:self.num_valid]
-            train_indices = indices[self.num_valid:]
-
+            # Split balanced valid/train set
+            valid_per_class = self.num_valid // self.num_classes
+            valid_indices = []
+            train_indices = []
+            for cls in range(self.num_classes):
+                cls_indices = np.where(labels_np == cls)[0]
+                np.random.shuffle(cls_indices)
+                valid_cls_idx = cls_indices[:valid_per_class]
+                train_cls_idx = cls_indices[valid_per_class:]
+                valid_indices.extend(valid_cls_idx)
+                train_indices.extend(train_cls_idx)
+            np.random.shuffle(valid_indices)
+            np.random.shuffle(train_indices)
             if self.valid:
                 self.data = self.data[valid_indices]
-                self.labels = list(np.array(self.labels)[valid_indices])
+                self.labels = list(labels_np[valid_indices])
             else:
                 self.data = self.data[train_indices]
-                self.labels = list(np.array(self.labels)[train_indices])
+                self.labels = list(labels_np[train_indices])
         else:
             file = os.path.join(root, self.base_folder, self.test_list[0][0])
             with open(file, 'rb') as fo:
@@ -116,5 +125,56 @@ class CIFAR100(CIFAR10):
     test_list = [
         ['test', 'f0ef6b0ae62326f3e7ffdfab6717acfc'],
     ]
-    # __init__, __getitem__, __len__, etc. đều giống y như trên
-
+    def __init__(self, root='', train=True, valid=False, num_valid=5000,
+                 transform=None, target_transform=None, download=False, seed=1):
+        self.root = root
+        self.transform = transform
+        self.target_transform = target_transform
+        self.train = train
+        self.valid = valid
+        self.num_valid = num_valid
+        self.num_classes = 100
+        np.random.seed(seed)
+        if download:
+            self.download()
+        if not self._check_integrity():
+            raise RuntimeError('Dataset not found or corrupted.' +
+                               ' You can use download=True to download it')
+        if self.train:
+            self.data = []
+            self.labels = []
+            for fentry in self.train_list:
+                file = os.path.join(root, self.base_folder, fentry[0])
+                with open(file, 'rb') as fo:
+                    entry = pickle.load(fo, encoding='latin1') if sys.version_info[0] >= 3 else pickle.load(fo)
+                self.data.append(entry['data'])
+                self.labels += entry['fine_labels']
+            self.data = np.concatenate(self.data)
+            self.data = self.data.reshape((50000, 3, 32, 32)).transpose((0, 2, 3, 1)) # HWC
+            labels_np = np.array(self.labels)
+            # Split balanced valid/train set
+            valid_per_class = self.num_valid // self.num_classes
+            valid_indices = []
+            train_indices = []
+            for cls in range(self.num_classes):
+                cls_indices = np.where(labels_np == cls)[0]
+                np.random.shuffle(cls_indices)
+                valid_cls_idx = cls_indices[:valid_per_class]
+                train_cls_idx = cls_indices[valid_per_class:]
+                valid_indices.extend(valid_cls_idx)
+                train_indices.extend(train_cls_idx)
+            np.random.shuffle(valid_indices)
+            np.random.shuffle(train_indices)
+            if self.valid:
+                self.data = self.data[valid_indices]
+                self.labels = list(labels_np[valid_indices])
+            else:
+                self.data = self.data[train_indices]
+                self.labels = list(labels_np[train_indices])
+        else:
+            file = os.path.join(root, self.base_folder, self.test_list[0][0])
+            with open(file, 'rb') as fo:
+                entry = pickle.load(fo, encoding='latin1') if sys.version_info[0] >= 3 else pickle.load(fo)
+            self.data = entry['data']
+            self.labels = entry['fine_labels']
+            self.data = self.data.reshape((10000, 3, 32, 32)).transpose((0, 2, 3, 1))  # HWC
