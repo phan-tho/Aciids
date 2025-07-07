@@ -347,27 +347,7 @@ class TeacherResNet32(nn.Module):
         out = self.linear(out)
         return out
 
-def load_teacher_resnet32(num_classes=10, ckpt_path=None, device='cuda'):
-    model = TeacherResNet32(num_classes=num_classes)
-    if ckpt_path is not None:
-        state_dict = torch.load(ckpt_path, map_location=device)
-        # Nếu checkpoint là dạng {'model': state_dict}
-        if 'model' in state_dict:
-            state_dict = state_dict['model']
-        model.load_state_dict(state_dict)
-        print("Loaded teacher weights from", ckpt_path)
-    model.eval()
-    model.to(device)
-    return model
 
-# Download checkpoint pretrained
-# https://github.com/akamaster/pytorch_resnet_cifar10
-# https://github.com/weiaicunzai/pytorch-cifar100
-# Thường file weight tên kiểu: resnet32-xxxx-best.pth
-
-# Ví dụ
-# teacher = load_teacher_resnet32(num_classes=10, ckpt_path='resnet32_cifar10.pth', device='cuda')
-# output = teacher(input_tensor)
 
 class VNet(MetaModule):
     def __init__(self, input, hidden1, output):

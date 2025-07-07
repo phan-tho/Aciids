@@ -73,6 +73,14 @@ def build_student():
     model = StudentResNet(num_classes=num_classes, num_blocks=[1, 1, 1]).to(device)
     return model
 
+# Download checkpoint pretrained
+# https://github.com/chenyaofo/pytorch-cifar-models
+# Thường file weight tên kiểu: resnet32-xxxx-best.pt
+
+# Ví dụ
+# teacher = load_teacher(num_classes=10, ckpt_path='resnet32_cifar10.pth', device='cuda')
+# output = teacher(input_tensor)
+
 def load_teacher():
     num_classes = 10 if args.dataset == 'cifar10' else 100
     model = TeacherResNet32(num_classes=num_classes)
