@@ -155,15 +155,7 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
         with torch.no_grad():
             outputs_teacher_val = teacher(inputs_val)
         outputs_val_student = meta_model(inputs_val)
-        hard_loss_meta, soft_loss_meta = kd_loss_fn(outputs_val_student, outputs_teacher_val, targets_val)
-        cost_meta = torch.stack([hard_loss_meta, soft_loss_meta], dim=1) # shape [batch, 2]
-
-        v_lambda_meta = vnet(cost_meta) # shape [batch, 2]
-        w_hard_meta = v_lambda_meta[:, 0:1] # shape (batch_size, 1)
-        w_soft_meta = v_lambda_meta[:, 1:2] # shape (batch_size, 1)
-
-        l_g_meta = torch.sum(w_hard_meta * hard_loss_meta.unsqueeze(1) +
-                            w_soft_meta * soft_loss_meta.unsqueeze(1)) / len(cost_meta)
+        l_g_meta = F.cross_entropy(outputs_val_student, targets_val)
         prec_meta = accuracy(outputs_val_student.data, targets_val.data, topk=(1,))[0]
 
         optimizer_vnet.zero_grad()
