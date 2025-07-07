@@ -22,7 +22,7 @@ parser.add_argument('--weight-decay', default=5e-4, type=float)
 parser.add_argument('--print-freq', default=10, type=int)
 parser.add_argument('--seed', type=int, default=1)
 parser.add_argument('--prefetch', type=int, default=0)
-parser.add_argument('--teacher_ckpt', default='teacher_resnet32_cifar10.pth', type=str)
+parser.add_argument('--teacher_ckpt', default='teacher_resnet32_cifar10.pt', type=str)
 parser.set_defaults(augment=True)
 args = parser.parse_args()
 
