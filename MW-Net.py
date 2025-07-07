@@ -16,7 +16,7 @@ parser.add_argument('--dataset', default='cifar10', type=str, help='dataset (cif
 parser.add_argument('--num_valid', type=int, default=1000)   
 parser.add_argument('--epochs', default=120, type=int, help='epochs to run')
 parser.add_argument('--batch_size', default=100, type=int)
-parser.add_argument('--lr', default=1e-1, type=float)
+parser.add_argument('--lr', default=0.01, type=float)
 parser.add_argument('--momentum', default=0.9, type=float)
 parser.add_argument('--weight-decay', default=5e-4, type=float)
 parser.add_argument('--print-freq', default=10, type=int)
