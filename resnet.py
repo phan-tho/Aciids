@@ -237,18 +237,18 @@ class BasicBlock(MetaModule):
         return out
 
 
-class ResNet32(MetaModule):
-    def __init__(self, num_classes, block=BasicBlock, num_blocks=[5, 5, 5]):
-        super(ResNet32, self).__init__()
-        self.in_planes = 16
+# Student model for ResNet
 
+class StudentResNet(MetaModule):
+    def __init__(self, num_classes=10, block=BasicBlock, num_blocks=[1, 1, 1]):
+        super().__init__()
+        self.in_planes = 16
         self.conv1 = MetaConv2d(3, 16, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn1 = MetaBatchNorm2d(16)
         self.layer1 = self._make_layer(block, 16, num_blocks[0], stride=1)
         self.layer2 = self._make_layer(block, 32, num_blocks[1], stride=2)
         self.layer3 = self._make_layer(block, 64, num_blocks[2], stride=2)
         self.linear = MetaLinear(64, num_classes)
-
         self.apply(_weights_init)
 
     def _make_layer(self, block, planes, num_blocks, stride):
@@ -257,7 +257,6 @@ class ResNet32(MetaModule):
         for stride in strides:
             layers.append(block(self.in_planes, planes, stride))
             self.in_planes = planes * block.expansion
-
         return nn.Sequential(*layers)
 
     def forward(self, x):
@@ -270,7 +269,105 @@ class ResNet32(MetaModule):
         out = self.linear(out)
         return out
 
+# Teacher model for ResNet
+class BasicBlock(nn.Module):
+    expansion = 1
 
+    def __init__(self, in_planes, planes, stride=1, option='A'):
+        super(BasicBlock, self).__init__()
+        self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(planes)
+        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(planes)
+        self.shortcut = nn.Sequential()
+        if stride != 1 or in_planes != planes:
+            if option == 'A':
+                self.shortcut = LambdaLayer(
+                    lambda x: F.pad(
+                        x[:, :, ::2, ::2],
+                        (0, 0, 0, 0, planes//4, planes//4),
+                        "constant", 0
+                    )
+                )
+            elif option == 'B':
+                self.shortcut = nn.Sequential(
+                    nn.Conv2d(in_planes, self.expansion * planes, kernel_size=1, stride=stride, bias=False),
+                    nn.BatchNorm2d(self.expansion * planes)
+                )
+
+    def forward(self, x):
+        out = F.relu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        out += self.shortcut(x)
+        out = F.relu(out)
+        return out
+
+class LambdaLayer(nn.Module):
+    def __init__(self, lambd):
+        super().__init__()
+        self.lambd = lambd
+
+    def forward(self, x):
+        return self.lambd(x)
+
+class TeacherResNet32(nn.Module):
+    def __init__(self, num_classes=10, block=BasicBlock, num_blocks=[5, 5, 5]):
+        super().__init__()
+        self.in_planes = 16
+
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(16)
+        self.layer1 = self._make_layer(block, 16, num_blocks[0], stride=1)
+        self.layer2 = self._make_layer(block, 32, num_blocks[1], stride=2)
+        self.layer3 = self._make_layer(block, 64, num_blocks[2], stride=2)
+        self.linear = nn.Linear(64, num_classes)
+
+        self._weights_init()
+
+    def _make_layer(self, block, planes, num_blocks, stride):
+        strides = [stride] + [1]*(num_blocks-1)
+        layers = []
+        for stride in strides:
+            layers.append(block(self.in_planes, planes, stride))
+            self.in_planes = planes * block.expansion
+        return nn.Sequential(*layers)
+
+    def _weights_init(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
+                nn.init.kaiming_normal_(m.weight)
+
+    def forward(self, x):
+        out = F.relu(self.bn1(self.conv1(x)))
+        out = self.layer1(out)
+        out = self.layer2(out)
+        out = self.layer3(out)
+        out = F.avg_pool2d(out, out.size()[3])
+        out = out.view(out.size(0), -1)
+        out = self.linear(out)
+        return out
+
+def load_teacher_resnet32(num_classes=10, ckpt_path=None, device='cuda'):
+    model = TeacherResNet32(num_classes=num_classes)
+    if ckpt_path is not None:
+        state_dict = torch.load(ckpt_path, map_location=device)
+        # Nếu checkpoint là dạng {'model': state_dict}
+        if 'model' in state_dict:
+            state_dict = state_dict['model']
+        model.load_state_dict(state_dict)
+        print("Loaded teacher weights from", ckpt_path)
+    model.eval()
+    model.to(device)
+    return model
+
+# Download checkpoint pretrained
+# https://github.com/akamaster/pytorch_resnet_cifar10
+# https://github.com/weiaicunzai/pytorch-cifar100
+# Thường file weight tên kiểu: resnet32-xxxx-best.pth
+
+# Ví dụ
+# teacher = load_teacher_resnet32(num_classes=10, ckpt_path='resnet32_cifar10.pth', device='cuda')
+# output = teacher(input_tensor)
 
 class VNet(MetaModule):
     def __init__(self, input, hidden1, output):
