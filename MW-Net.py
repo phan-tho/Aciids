@@ -71,15 +71,8 @@ def build_student():
     return model
 
 def load_teacher():
-    num_classes = 10 if args.dataset == 'cifar10' else 100
-    model = TeacherResNet32(num_classes=num_classes)
-    state_dict = torch.load(args.teacher_ckpt, map_location=device)
-    if 'state_dict' in state_dict: state_dict = state_dict['state_dict']
-    model.load_state_dict(state_dict)
-    model.eval()
-    for p in model.parameters():
-        p.requires_grad = False
-    model.to(device)
+    model = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar10_resnet32", pretrained=True)
+    model.to(device)    
     return model
 
 def accuracy(output, target, topk=(1,)):
