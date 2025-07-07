@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import argparse
 import os
 import time
@@ -10,12 +9,11 @@ import torch.optim
 import torchvision.transforms as transforms
 import numpy as np
 
-from resnet import StudentResNet, VNet, TeacherResNet32       # StudentResNet là ResNet8 (num_blocks=[1,1,1])   # Đã load weight ở ngoài (không meta)
-from load_corrupted_data import CIFAR10, CIFAR100
-
+from resnet import StudentResNet, VNet, TeacherResNet32 # StudentResNet là ResNet8 (num_blocks=[1,1,1])
+from cifar import CIFAR10, CIFAR100  
 parser = argparse.ArgumentParser(description='Meta-Weight-Net KD Training')
 parser.add_argument('--dataset', default='cifar10', type=str, help='dataset (cifar10/cifar100)')
-parser.add_argument('--num_meta', type=int, default=1000)
+parser.add_argument('--num_valid', type=int, default=1000)   
 parser.add_argument('--epochs', default=120, type=int, help='epochs to run')
 parser.add_argument('--batch_size', default=100, type=int)
 parser.add_argument('--lr', default=1e-1, type=float)
@@ -45,47 +43,37 @@ def build_dataset():
         normalize
     ])
     if args.dataset == 'cifar10':
-        train_data_meta = CIFAR10(
-            root='../data', train=True, meta=True, num_meta=args.num_meta, transform=train_transform, download=True)
         train_data = CIFAR10(
-            root='../data', train=True, meta=False, num_meta=args.num_meta, transform=train_transform, download=True, seed=args.seed)
+            root='../data', train=True, valid=False, num_valid=args.num_valid, transform=train_transform, download=True, seed=args.seed)
+        valid_data = CIFAR10(
+            root='../data', train=True, valid=True, num_valid=args.num_valid, transform=train_transform, download=True, seed=args.seed)
         test_data = CIFAR10(root='../data', train=False, transform=test_transform, download=True)
     elif args.dataset == 'cifar100':
-        train_data_meta = CIFAR100(
-            root='../data', train=True, meta=True, num_meta=args.num_meta, transform=train_transform, download=True)
         train_data = CIFAR100(
-            root='../data', train=True, meta=False, num_meta=args.num_meta, transform=train_transform, download=True, seed=args.seed)
+            root='../data', train=True, valid=False, num_valid=args.num_valid, transform=train_transform, download=True, seed=args.seed)
+        valid_data = CIFAR100(
+            root='../data', train=True, valid=True, num_valid=args.num_valid, transform=train_transform, download=True, seed=args.seed)
         test_data = CIFAR100(root='../data', train=False, transform=test_transform, download=True)
 
     train_loader = torch.utils.data.DataLoader(
         train_data, batch_size=args.batch_size, shuffle=True,
         num_workers=args.prefetch, pin_memory=True)
-    train_meta_loader = torch.utils.data.DataLoader(
-        train_data_meta, batch_size=args.batch_size, shuffle=True,
+    valid_loader = torch.utils.data.DataLoader(
+        valid_data, batch_size=args.batch_size, shuffle=True,
         num_workers=args.prefetch, pin_memory=True)
     test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.batch_size, shuffle=False,
                                               num_workers=args.prefetch, pin_memory=True)
-    return train_loader, train_meta_loader, test_loader
+    return train_loader, valid_loader, test_loader
 
 def build_student():
-    # Student = ResNet8
     num_classes = 10 if args.dataset == 'cifar10' else 100
     model = StudentResNet(num_classes=num_classes, num_blocks=[1, 1, 1]).to(device)
     return model
-
-# Download checkpoint pretrained
-# https://github.com/chenyaofo/pytorch-cifar-models
-# Thường file weight tên kiểu: resnet32-xxxx-best.pt
-
-# Ví dụ
-# teacher = load_teacher(num_classes=10, ckpt_path='resnet32_cifar10.pth', device='cuda')
-# output = teacher(input_tensor)
 
 def load_teacher():
     num_classes = 10 if args.dataset == 'cifar10' else 100
     model = TeacherResNet32(num_classes=num_classes)
     state_dict = torch.load(args.teacher_ckpt, map_location=device)
-   
     if 'state_dict' in state_dict: state_dict = state_dict['state_dict']
     model.load_state_dict(state_dict)
     model.eval()
@@ -130,19 +118,17 @@ def test(model, test_loader):
 
 def kd_loss_fn(student_logits, teacher_logits, target, T=4):
     """Returns hard_loss (CE with gt) and soft_loss (KL with teacher) per sample"""
-    # Hard loss
     hard_loss = F.cross_entropy(student_logits, target, reduction='none')
-    # Soft loss (KLDiv with temperature)
     log_student = F.log_softmax(student_logits / T, dim=1)
     soft_teacher = F.softmax(teacher_logits / T, dim=1)
     soft_loss = F.kl_div(log_student, soft_teacher, reduction='none').sum(1) * (T*T)
     return hard_loss, soft_loss
 
-def train(train_loader, train_meta_loader, model, teacher, vnet, optimizer_model, optimizer_vnet, epoch):
+def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, optimizer_vnet, epoch):
     print('\nEpoch: %d' % epoch)
     train_loss = 0
     meta_loss = 0
-    train_meta_loader_iter = iter(train_meta_loader)
+    valid_loader_iter = iter(valid_loader)
 
     for batch_idx, (inputs, targets) in enumerate(train_loader):
         model.train()
@@ -157,10 +143,10 @@ def train(train_loader, train_meta_loader, model, teacher, vnet, optimizer_model
 
         outputs_student = meta_model(inputs)
         hard_loss, soft_loss = kd_loss_fn(outputs_student, outputs_teacher, targets)
-        cost = torch.stack([hard_loss, soft_loss], dim=1)  # shape [batch, 2]
+        cost = torch.stack([hard_loss, soft_loss], dim=1) # shape [batch, 2]
         v_lambda = vnet(cost.data)
-        w_hard = v_lambda[:, 0:1]   # shape [batch, 1]
-        w_soft = v_lambda[:, 1:2]   # shape [batch, 1]
+        w_hard = v_lambda[:, 0:1] # shape (batch_size, 1)
+        w_soft = v_lambda[:, 1:2] # shape (batch_size, 1)
         l_f_meta = torch.sum(w_hard * hard_loss.unsqueeze(1) + w_soft * soft_loss.unsqueeze(1)) / len(cost)
         meta_model.zero_grad()
         grads = torch.autograd.grad(l_f_meta, (meta_model.params()), create_graph=True)
@@ -168,21 +154,20 @@ def train(train_loader, train_meta_loader, model, teacher, vnet, optimizer_model
         del grads
 
         try:
-            inputs_val, targets_val = next(train_meta_loader_iter)
+            inputs_val, targets_val = next(valid_loader_iter)
         except StopIteration:
-            train_meta_loader_iter = iter(train_meta_loader)
-            inputs_val, targets_val = next(train_meta_loader_iter)
+            valid_loader_iter = iter(valid_loader)
+            inputs_val, targets_val = next(valid_loader_iter)
         inputs_val, targets_val = inputs_val.to(device), targets_val.to(device)
         with torch.no_grad():
             outputs_teacher_val = teacher(inputs_val)
         outputs_val_student = meta_model(inputs_val)
         hard_loss_meta, soft_loss_meta = kd_loss_fn(outputs_val_student, outputs_teacher_val, targets_val)
-        cost_meta = torch.stack([hard_loss_meta, soft_loss_meta], dim=1)  # shape [batch, 2]
+        cost_meta = torch.stack([hard_loss_meta, soft_loss_meta], dim=1) # shape [batch, 2]
 
-        # KHÔNG detached vì cần gradient tới VNet
-        v_lambda_meta = vnet(cost_meta)  # shape [batch, 2]
-        w_hard_meta = v_lambda_meta[:, 0:1]
-        w_soft_meta = v_lambda_meta[:, 1:2]
+        v_lambda_meta = vnet(cost_meta) # shape [batch, 2]
+        w_hard_meta = v_lambda_meta[:, 0:1] # shape (batch_size, 1)
+        w_soft_meta = v_lambda_meta[:, 1:2] # shape (batch_size, 1)
 
         l_g_meta = torch.sum(w_hard_meta * hard_loss_meta.unsqueeze(1) +
                             w_soft_meta * soft_loss_meta.unsqueeze(1)) / len(cost_meta)
@@ -220,7 +205,7 @@ def train(train_loader, train_meta_loader, model, teacher, vnet, optimizer_model
                       (train_loss / (batch_idx + 1)), (meta_loss / (batch_idx + 1)), prec_train, prec_meta))
 
 def main():
-    train_loader, train_meta_loader, test_loader = build_dataset()
+    train_loader, valid_loader, test_loader = build_dataset()
     model = build_student()
     teacher = load_teacher()
     vnet = VNet(2, 100, 2).to(device)  # input=2 (hard/soft loss), output=2 (weight cho mỗi loss)
@@ -231,7 +216,7 @@ def main():
     best_acc = 0
     for epoch in range(args.epochs):
         adjust_learning_rate(optimizer_model, epoch)
-        train(train_loader, train_meta_loader, model, teacher, vnet, optimizer_model, optimizer_vnet, epoch)
+        train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, optimizer_vnet, epoch)
         test_acc = test(model=model, test_loader=test_loader)
         if test_acc >= best_acc:
             best_acc = test_acc

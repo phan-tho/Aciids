@@ -25,7 +25,7 @@ import numpy as np
 
 from wideresnet import WideResNet, VNet
 from resnet import ResNet32,VNet
-from load_corrupted_data import CIFAR10, CIFAR100
+from cifar import CIFAR10, CIFAR100
 
 parser = argparse.ArgumentParser(description='PyTorch WideResNet Training')
 parser.add_argument('--dataset', default='cifar10', type=str,

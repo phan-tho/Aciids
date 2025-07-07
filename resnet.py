@@ -310,6 +310,15 @@ class LambdaLayer(nn.Module):
     def forward(self, x):
         return self.lambd(x)
 
+# Download checkpoint pretrained
+# https://github.com/chenyaofo/pytorch-cifar-models
+# Thường file weight tên kiểu: resnet32-xxxx-best.pt
+
+# Ví dụ
+# teacher = TeacherResNet32(num_classes=10, block=BasicBlock, num_blocks=[5, 5, 5])
+# teacher = load_teacher(num_classes=10, ckpt_path='resnet32_cifar10.pth', device='cuda')
+# output = teacher(input_tensor)
+
 class TeacherResNet32(nn.Module):
     def __init__(self, num_classes=10, block=BasicBlock, num_blocks=[5, 5, 5]):
         super().__init__()
