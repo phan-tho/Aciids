@@ -76,7 +76,8 @@ def build_student():
     return model
 
 def load_teacher():
-    model = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar10_resnet32", pretrained=True)
+    num_classes = 10 if args.dataset == 'cifar10' else 100
+    model = torch.hub.load("chenyaofo/pytorch-cifar-models", f"cifar{num_classes}_resnet32", pretrained=True)
     model.to(device)    
     return model
 
@@ -195,7 +196,7 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
             })
 
             # pbar.update(1)
-            if (batch_idx + 1) % 50 == 0:
+            if (batch_idx + 1) % 100 == 0:
                 pbar.update(1)
                 # print('Epoch: [%d/%d]\t'
                 #     'Iters: [%d/%d]\t'
@@ -226,8 +227,6 @@ def main():
             checkpoint_path = f'best_model_{args.dataset}.pth'
             check_point = {'model': model.state_dict(),
                            'vnet': vnet.state_dict(),
-                           'optimizer_model': optimizer_model.state_dict(),
-                           'optimizer_vnet': optimizer_vnet.state_dict(),
                            'acc@1': best_acc}
             torch.save(check_point, checkpoint_path)
             print(f'Saved best model to {checkpoint_path}')
