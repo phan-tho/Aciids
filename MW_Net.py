@@ -193,16 +193,18 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
                 'Prec@1': prec_train.item(),
                 'Prec_meta@1': prec_meta.item()
             })
-            pbar.update(1)
-            # if (batch_idx + 1) % 50 == 0:
-            #     print('Epoch: [%d/%d]\t'
-            #         'Iters: [%d/%d]\t'
-            #         'Loss: %.4f\t'
-            #         'MetaLoss:%.4f\t'
-            #         'Prec@1 %.2f\t'
-            #         'Prec_meta@1 %.2f' % (
-            #             (epoch + 1), args.epochs, batch_idx + 1, len(train_loader.dataset)/args.batch_size,
-            #             (train_loss / (batch_idx + 1)), (meta_loss / (batch_idx + 1)), prec_train, prec_meta))
+
+            # pbar.update(1)
+            if (batch_idx + 1) % 50 == 0:
+                pbar.update(1)
+                # print('Epoch: [%d/%d]\t'
+                #     'Iters: [%d/%d]\t'
+                #     'Loss: %.4f\t'
+                #     'MetaLoss:%.4f\t'
+                #     'Prec@1 %.2f\t'
+                #     'Prec_meta@1 %.2f' % (
+                #         (epoch + 1), args.epochs, batch_idx + 1, len(train_loader.dataset)/args.batch_size,
+                #         (train_loss / (batch_idx + 1)), (meta_loss / (batch_idx + 1)), prec_train, prec_meta))
 
 def main():
     train_loader, valid_loader, test_loader = build_dataset()
