@@ -9,13 +9,15 @@ import torch.optim
 import torchvision.transforms as transforms
 import numpy as np
 
+import tqdm
+
 from resnet import StudentResNet, VNet, TeacherResNet32 # StudentResNet là ResNet8 (num_blocks=[1,1,1])
 from cifar import CIFAR10, CIFAR100  
 parser = argparse.ArgumentParser(description='Meta-Weight-Net KD Training')
 parser.add_argument('--dataset', default='cifar10', type=str, help='dataset (cifar10/cifar100)')
 parser.add_argument('--num_valid', type=int, default=1000)   
 parser.add_argument('--epochs', default=120, type=int, help='epochs to run')
-parser.add_argument('--batch_size', default=100, type=int)
+parser.add_argument('--batch_size', default=128, type=int)
 parser.add_argument('--lr', default=0.01, type=float)
 parser.add_argument('--momentum', default=0.9, type=float)
 parser.add_argument('--weight-decay', default=5e-4, type=float)
@@ -23,8 +25,11 @@ parser.add_argument('--print-freq', default=10, type=int)
 parser.add_argument('--seed', type=int, default=1)
 parser.add_argument('--prefetch', type=int, default=0)
 parser.add_argument('--teacher_ckpt', default='teacher_resnet32_cifar10.pt', type=str)
+
 parser.set_defaults(augment=True)
-args = parser.parse_args()
+
+args, unknown = parser.parse_known_args()
+# args = parser.parse_args()
 
 torch.manual_seed(args.seed)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -123,71 +128,81 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
     meta_loss = 0
     valid_loader_iter = iter(valid_loader)
 
-    for batch_idx, (inputs, targets) in enumerate(train_loader):
-        model.train()
-        inputs, targets = inputs.to(device), targets.to(device)
-        with torch.no_grad():
-            outputs_teacher = teacher(inputs)
+    # use tqdm to show progress bar
+    with tqdm.tqdm(total=len(train_loader), desc=f'Epoch {epoch + 1}/{args.epochs}', unit='batch') as pbar:
+        for batch_idx, (inputs, targets) in enumerate(train_loader):
+            model.train()
+            inputs, targets = inputs.to(device), targets.to(device)
+            with torch.no_grad():
+                outputs_teacher = teacher(inputs)
 
-        # Step 1: Meta-model (for meta-update) 
-        meta_model = build_student()
-        meta_model.load_state_dict(model.state_dict())
-        meta_model.to(device)
+            # Step 1: Meta-model (for meta-update) 
+            meta_model = build_student()
+            meta_model.load_state_dict(model.state_dict())
+            meta_model.to(device)
 
-        outputs_student = meta_model(inputs)
-        hard_loss, soft_loss = kd_loss_fn(outputs_student, outputs_teacher, targets)
-        cost = torch.stack([hard_loss, soft_loss], dim=1) # shape [batch, 2]
-        v_lambda = vnet(cost.data)
-        w_hard = v_lambda[:, 0:1] # shape (batch_size, 1)
-        w_soft = v_lambda[:, 1:2] # shape (batch_size, 1)
-        l_f_meta = torch.sum(w_hard * hard_loss.unsqueeze(1) + w_soft * soft_loss.unsqueeze(1)) / len(cost)
-        meta_model.zero_grad()
-        grads = torch.autograd.grad(l_f_meta, (meta_model.params()), create_graph=True)
-        meta_model.update_params(lr_inner=args.lr, source_params=grads)
-        del grads
+            outputs_student = meta_model(inputs)
+            hard_loss, soft_loss = kd_loss_fn(outputs_student, outputs_teacher, targets)
+            cost = torch.stack([hard_loss, soft_loss], dim=1) # shape [batch, 2]
+            v_lambda = vnet(cost.data)
+            w_hard = v_lambda[:, 0:1] # shape (batch_size, 1)
+            w_soft = v_lambda[:, 1:2] # shape (batch_size, 1)
+            l_f_meta = torch.sum(w_hard * hard_loss.unsqueeze(1) + w_soft * soft_loss.unsqueeze(1)) / len(cost)
+            meta_model.zero_grad()
+            grads = torch.autograd.grad(l_f_meta, (meta_model.params()), create_graph=True)
+            meta_model.update_params(lr_inner=args.lr, source_params=grads)
+            del grads
 
-        try:
-            inputs_val, targets_val = next(valid_loader_iter)
-        except StopIteration:
-            valid_loader_iter = iter(valid_loader)
-            inputs_val, targets_val = next(valid_loader_iter)
-        inputs_val, targets_val = inputs_val.to(device), targets_val.to(device)
-        with torch.no_grad():
-            outputs_teacher_val = teacher(inputs_val)
-        outputs_val_student = meta_model(inputs_val)
-        l_g_meta = F.cross_entropy(outputs_val_student, targets_val)
-        prec_meta = accuracy(outputs_val_student.data, targets_val.data, topk=(1,))[0]
+            try:
+                inputs_val, targets_val = next(valid_loader_iter)
+            except StopIteration:
+                valid_loader_iter = iter(valid_loader)
+                inputs_val, targets_val = next(valid_loader_iter)
+            inputs_val, targets_val = inputs_val.to(device), targets_val.to(device)
+            with torch.no_grad():
+                outputs_teacher_val = teacher(inputs_val)
+            outputs_val_student = meta_model(inputs_val)
+            l_g_meta = F.cross_entropy(outputs_val_student, targets_val)
+            prec_meta = accuracy(outputs_val_student.data, targets_val.data, topk=(1,))[0]
 
-        optimizer_vnet.zero_grad()
-        l_g_meta.backward()
-        optimizer_vnet.step()
+            optimizer_vnet.zero_grad()
+            l_g_meta.backward()
+            optimizer_vnet.step()
 
-        # Step 2: Main model update
-        outputs_student = model(inputs)
-        hard_loss, soft_loss = kd_loss_fn(outputs_student, outputs_teacher, targets)
-        cost = torch.stack([hard_loss, soft_loss], dim=1)
-        with torch.no_grad():
-            v_lambda = vnet(cost)
-        w_hard = v_lambda[:, 0:1]
-        w_soft = v_lambda[:, 1:2]
-        loss = torch.sum(w_hard * hard_loss.unsqueeze(1) + w_soft * soft_loss.unsqueeze(1)) / len(cost)
-        prec_train = accuracy(outputs_student.data, targets.data, topk=(1,))[0]
+            # Step 2: Main model update
+            outputs_student = model(inputs)
+            hard_loss, soft_loss = kd_loss_fn(outputs_student, outputs_teacher, targets)
+            cost = torch.stack([hard_loss, soft_loss], dim=1)
+            with torch.no_grad():
+                v_lambda = vnet(cost)
+            w_hard = v_lambda[:, 0:1]
+            w_soft = v_lambda[:, 1:2]
+            loss = torch.sum(w_hard * hard_loss.unsqueeze(1) + w_soft * soft_loss.unsqueeze(1)) / len(cost)
+            prec_train = accuracy(outputs_student.data, targets.data, topk=(1,))[0]
 
-        optimizer_model.zero_grad()
-        loss.backward()
-        optimizer_model.step()
+            optimizer_model.zero_grad()
+            loss.backward()
+            optimizer_model.step()
 
-        train_loss += loss.item()
-        meta_loss += l_g_meta.item()
-        if (batch_idx + 1) % 50 == 0:
-            print('Epoch: [%d/%d]\t'
-                  'Iters: [%d/%d]\t'
-                  'Loss: %.4f\t'
-                  'MetaLoss:%.4f\t'
-                  'Prec@1 %.2f\t'
-                  'Prec_meta@1 %.2f' % (
-                      (epoch + 1), args.epochs, batch_idx + 1, len(train_loader.dataset)/args.batch_size,
-                      (train_loss / (batch_idx + 1)), (meta_loss / (batch_idx + 1)), prec_train, prec_meta))
+            train_loss += loss.item()
+            meta_loss += l_g_meta.item()
+
+            pbar.set_postfix({
+                'Loss': train_loss / (batch_idx + 1),
+                'MetaLoss': meta_loss / (batch_idx + 1),
+                'Prec@1': prec_train.item(),
+                'Prec_meta@1': prec_meta.item()
+            })
+            pbar.update(1)
+            # if (batch_idx + 1) % 50 == 0:
+            #     print('Epoch: [%d/%d]\t'
+            #         'Iters: [%d/%d]\t'
+            #         'Loss: %.4f\t'
+            #         'MetaLoss:%.4f\t'
+            #         'Prec@1 %.2f\t'
+            #         'Prec_meta@1 %.2f' % (
+            #             (epoch + 1), args.epochs, batch_idx + 1, len(train_loader.dataset)/args.batch_size,
+            #             (train_loss / (batch_idx + 1)), (meta_loss / (batch_idx + 1)), prec_train, prec_meta))
 
 def main():
     train_loader, valid_loader, test_loader = build_dataset()
@@ -205,6 +220,15 @@ def main():
         test_acc = test(model=model, test_loader=test_loader)
         if test_acc >= best_acc:
             best_acc = test_acc
+
+            checkpoint_path = f'best_model_{args.dataset}.pth'
+            check_point = {'model': model.state_dict(),
+                           'vnet': vnet.state_dict(),
+                           'optimizer_model': optimizer_model.state_dict(),
+                           'optimizer_vnet': optimizer_vnet.state_dict(),
+                           'acc@1': best_acc}
+            torch.save(check_point, checkpoint_path)
+            print(f'Saved best model to {checkpoint_path}')
     print('best accuracy:', best_acc)
 
 if __name__ == '__main__':
