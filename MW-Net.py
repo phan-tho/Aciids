@@ -71,7 +71,11 @@ def build_student():
     return model
 
 def load_teacher():
-    model = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar10_resnet32", pretrained=True)
+    # model = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar10_resnet32", pretrained=True)
+    import teachernet as teachernet
+    model = teachernet.resnet32x4(num_classes=10 if args.dataset == 'cifar10' else 100)
+    ckt = torch.load(args.teacher_ckpt, map_location=device)
+    model.load_state_dict(ckt['net'])
     model.to(device)    
     return model
 
