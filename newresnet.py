@@ -22,6 +22,12 @@ class MetaModule(nn.Module):
         for name, param in self.named_params(self):
             yield param
 
+    def named_leaves(self):
+        return []
+
+    def named_submodules(self):
+        return []
+
     def named_params(self, curr_module=None, memo=None, prefix=''):
         if memo is None:
             memo = set()
@@ -39,47 +45,37 @@ class MetaModule(nn.Module):
 
         for mname, module in curr_module.named_children():
             submodule_prefix = prefix + ('.' if prefix else '') + mname
-            for p in self.named_params(module, memo, submodule_prefix):
-                yield p
+            for name, p in self.named_params(module, memo, submodule_prefix):
+                yield name, p
 
     def update_params(self, lr_inner, first_order=False, source_params=None, detach=False):
         if source_params is not None:
             for tgt, src in zip(self.named_params(self), source_params):
-                name_tgt, param_tgt = tgt
+                name_t, param_t = tgt
                 grad = src
                 if first_order:
-                    param_tgt.data.sub_(lr_inner * grad)
-                else:
-                    param_tgt.grad.data.zero_()  # Clear existing gradients before adding
-                    param_tgt.grad.data.add_(grad)
-                    if detach:
-                        param_tgt.data.sub_(lr_inner * param_tgt.grad.data)
-                        param_tgt.grad.data.zero_()
-                    else:
-                        param_tgt.data.sub_(lr_inner * param_tgt.grad)
+                    grad = to_var(grad.detach().data)
+                tmp = param_t - lr_inner * grad
+                self.set_param(self, name_t, tmp)
         else:
+
             for name, param in self.named_params(self):
                 if not detach:
-                    if param.grad is not None:
-                        if not first_order:
-                            param.data.sub_(lr_inner * param.grad)
-                        else:
-                            param.data.sub_(lr_inner * param.grad.data)
+                    grad = param.grad
+                    if first_order:
+                        grad = to_var(grad.detach().data)
+                    tmp = param - lr_inner * grad
+                    self.set_param(self, name, tmp)
                 else:
-                    param.data.sub_(lr_inner * param.grad.data)
+                    param = param.detach_()  # https://blog.csdn.net/qq_39709535/article/details/81866686
+                    self.set_param(self, name, param)
 
-
-    def _copy_attr(self, attr_name, new_module):
-        if hasattr(self, attr_name):
-            setattr(new_module, attr_name, getattr(self, attr_name))
 
     def copy(self, other, same_var=False):
         for name, param in other.named_params():
             if not same_var:
-                new_param = to_var(param.data.clone(), requires_grad=True, is_cuda=param.is_cuda)
-            else:
-                new_param = param
-            self.set_param(self, name, new_param)
+                param = to_var(param.data.clone(), requires_grad=True)
+            self.set_param(name, param)
 
     def set_param(self, curr_mod, name, param):
         if '.' in name:
