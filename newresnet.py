@@ -97,16 +97,13 @@ class MetaModule(nn.Module):
 class MetaLinear(MetaModule):
     def __init__(self, *args, **kwargs):
         super().__init__()
-        ignore_this_module = nn.Linear(*args, **kwargs)
+        ignore = nn.Linear(*args, **kwargs)
 
-        self.register_buffer('weight', to_var(ignore_this_module.weight.data, requires_grad=True))
-        if ignore_this_module.bias is not None:
-            self.register_buffer('bias', to_var(ignore_this_module.bias.data, requires_grad=True))
-        else:
-            self.bias = None
+        self.register_buffer('weight', to_var(ignore.weight.data, requires_grad=True))
+        self.register_buffer('bias', to_var(ignore.bias.data, requires_grad=True))
 
-    def forward(self, input):
-        return F.linear(input, self.weight, self.bias)
+    def forward(self, x):
+        return F.linear(x, self.weight, self.bias)
 
     def named_leaves(self):
         return [('weight', self.weight), ('bias', self.bias)]
@@ -115,24 +112,25 @@ class MetaLinear(MetaModule):
 class MetaConv2d(MetaModule):
     def __init__(self, *args, **kwargs):
         super().__init__()
-        ignore_this_module = nn.Conv2d(*args, **kwargs)
+        ignore = nn.Conv2d(*args, **kwargs)
 
-        self.register_buffer('weight', to_var(ignore_this_module.weight.data, requires_grad=True))
+        self.in_channels = ignore.in_channels
+        self.out_channels = ignore.out_channels
+        self.stride = ignore.stride
+        self.padding = ignore.padding
+        self.dilation = ignore.dilation
+        self.groups = ignore.groups
+        self.kernel_size = ignore.kernel_size
 
-        if ignore_this_module.bias is not None:
-            self.register_buffer('bias', to_var(ignore_this_module.bias.data, requires_grad=True))
+        self.register_buffer('weight', to_var(ignore.weight.data, requires_grad=True))
+
+        if ignore.bias is not None:
+            self.register_buffer('bias', to_var(ignore.bias.data, requires_grad=True))
         else:
-            self.bias = None
+            self.register_buffer('bias', None)
 
-        # Copy non-parameter attributes from the original Conv2d
-        self._copy_attr('stride', ignore_this_module)
-        self._copy_attr('padding', ignore_this_module)
-        self._copy_attr('dilation', ignore_this_module)
-        self._copy_attr('groups', ignore_this_module)
-
-    def forward(self, input):
-        return F.conv2d(input, self.weight, self.bias,
-                        self.stride, self.padding, self.dilation, self.groups)
+    def forward(self, x):
+        return F.conv2d(x, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
 
     def named_leaves(self):
         return [('weight', self.weight), ('bias', self.bias)]
@@ -141,24 +139,28 @@ class MetaConv2d(MetaModule):
 class MetaBatchNorm2d(MetaModule):
     def __init__(self, *args, **kwargs):
         super().__init__()
-        ignore_this_module = nn.BatchNorm2d(*args, **kwargs)
+        ignore = nn.BatchNorm2d(*args, **kwargs)
 
-        self.register_buffer('weight', to_var(ignore_this_module.weight.data, requires_grad=True))
-        self.register_buffer('bias', to_var(ignore_this_module.bias.data, requires_grad=True))
+        self.num_features = ignore.num_features
+        self.eps = ignore.eps
+        self.momentum = ignore.momentum
+        self.affine = ignore.affine
+        self.track_running_stats = ignore.track_running_stats
 
-        self.register_buffer('running_mean', ignore_this_module.running_mean)
-        self.register_buffer('running_var', ignore_this_module.running_var)
-        self.register_buffer('num_batches_tracked', ignore_this_module.num_batches_tracked)
+        if self.affine:
+            self.register_buffer('weight', to_var(ignore.weight.data, requires_grad=True))
+            self.register_buffer('bias', to_var(ignore.bias.data, requires_grad=True))
 
-        # Copy non-parameter attributes from the original BatchNorm2d
-        self._copy_attr('eps', ignore_this_module)
-        self._copy_attr('momentum', ignore_this_module)
-        self._copy_attr('affine', ignore_this_module)
-        self._copy_attr('track_running_stats', ignore_this_module)
+        if self.track_running_stats:
+            self.register_buffer('running_mean', torch.zeros(self.num_features))
+            self.register_buffer('running_var', torch.ones(self.num_features))
+        else:
+            self.register_parameter('running_mean', None)
+            self.register_parameter('running_var', None)
 
-    def forward(self, input):
-        return F.batch_norm(input, self.running_mean, self.running_var, self.weight, self.bias,
-                            self.training, self.momentum, self.eps)
+    def forward(self, x):
+        return F.batch_norm(x, self.running_mean, self.running_var, self.weight, self.bias,
+                            self.training or not self.track_running_stats, self.momentum, self.eps)
 
     def named_leaves(self):
         return [('weight', self.weight), ('bias', self.bias)]
