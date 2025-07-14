@@ -14,15 +14,17 @@ from cifar import CIFAR10, CIFAR100
 parser = argparse.ArgumentParser(description='Meta-Weight-Net KD Training')
 parser.add_argument('--dataset', default='cifar10', type=str, help='dataset (cifar10/cifar100)')
 parser.add_argument('--num_valid', type=int, default=1000)   
-parser.add_argument('--epochs', default=120, type=int, help='epochs to run')
+parser.add_argument('--epochs', default=200, type=int, help='epochs to run')
 parser.add_argument('--batch_size', default=100, type=int)
-parser.add_argument('--lr', default=0.01, type=float)
+parser.add_argument('--lr', default=0.1, type=float)
 parser.add_argument('--momentum', default=0.9, type=float)
 parser.add_argument('--weight-decay', default=5e-4, type=float)
+parser.add_argument('--lr_decay_epoch', default=[5, 80, 120, 175])
 parser.add_argument('--print-freq', default=10, type=int)
 parser.add_argument('--seed', type=int, default=1)
 parser.add_argument('--prefetch', type=int, default=0)
 parser.add_argument('--teacher_ckpt', default='teacher_resnet32_cifar10.pt', type=str)
+parser.add_argument('--student_arc', default='old', help='student architecture (old/new), new is resnet8x4 build in newresnet.py')
 parser.set_defaults(augment=True)
 args = parser.parse_args()
 
@@ -67,8 +69,13 @@ def build_dataset():
 
 def build_student():
     num_classes = 10 if args.dataset == 'cifar10' else 100
-    model = StudentResNet(num_classes=num_classes, num_blocks=[1, 1, 1]).to(device)
-    return model
+    if args.student_arc == 'old':
+        return StudentResNet(num_classes=num_classes, num_blocks=[1, 1, 1]).to(device)
+    else:
+        import newresnet as newresnet
+
+        return newresnet.meta_resnet8x4(num_classes=num_classes).to(device)
+    # return model
 
 def load_teacher():
     # model = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar10_resnet32", pretrained=True)
@@ -76,6 +83,7 @@ def load_teacher():
     model = teachernet.resnet32x4(num_classes=10 if args.dataset == 'cifar10' else 100)
     ckt = torch.load(args.teacher_ckpt, map_location=device)
     model.load_state_dict(ckt['net'])
+    print('load teacher acc', ckt['acc@1'])
     model.to(device)    
     return model
 
@@ -92,7 +100,11 @@ def accuracy(output, target, topk=(1,)):
     return res
 
 def adjust_learning_rate(optimizer, epoch):
-    lr = args.lr * ((0.1 ** int(epoch >= 80)) * (0.1 ** int(epoch >= 100)))
+    # lr = args.lr * ((0.1 ** int(epoch >= 80)) * (0.1 ** int(epoch >= 100)))
+    lr = args.lr
+    for e in args.lr_decay_epoch:
+        if epoch >= e:
+            lr *= 0.1
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
@@ -209,6 +221,14 @@ def main():
         test_acc = test(model=model, test_loader=test_loader)
         if test_acc >= best_acc:
             best_acc = test_acc
+            ckpt = {
+                'student': model.state_dict(),
+                'vnet': vnet.state_dict(),
+                'acc@1': best_acc,
+                'epoch': epoch + 1
+            }
+            torch.save(ckpt, f'checkpoint_{args.dataset}.pth')
+        
     print('best accuracy:', best_acc)
 
 if __name__ == '__main__':
