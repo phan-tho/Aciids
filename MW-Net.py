@@ -19,8 +19,9 @@ parser.add_argument('--batch_size', default=100, type=int)
 parser.add_argument('--lr', default=0.1, type=float)
 parser.add_argument('--momentum', default=0.9, type=float)
 parser.add_argument('--weight-decay', default=5e-4, type=float)
-parser.add_argument('--lr_decay_epoch', default=[5, 80, 120, 175])
-parser.add_argument('--print-freq', default=10, type=int)
+parser.add_argument('--lr_decay_epoch', default=[5, 80, 120, 175], nargs='+', type=int,
+                    help='epochs to decay learning rate')
+parser.add_argument('--print_freq', default=100, type=int)
 parser.add_argument('--seed', type=int, default=1)
 parser.add_argument('--prefetch', type=int, default=0)
 parser.add_argument('--teacher_ckpt', default='teacher_resnet32_cifar10.pt', type=str)
@@ -172,6 +173,7 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
             outputs_teacher_val = teacher(inputs_val)
         outputs_val_student = meta_model(inputs_val)
         l_g_meta = F.cross_entropy(outputs_val_student, targets_val)
+        # NOTE: l_g_meta use only L_CE, not KD loss
         prec_meta = accuracy(outputs_val_student.data, targets_val.data, topk=(1,))[0]
 
         optimizer_vnet.zero_grad()
@@ -195,7 +197,7 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
 
         train_loss += loss.item()
         meta_loss += l_g_meta.item()
-        if (batch_idx + 1) % 50 == 0:
+        if (batch_idx + 1) % args.print_freq == 0:
             print('Epoch: [%d/%d]\t'
                   'Iters: [%d/%d]\t'
                   'Loss: %.4f\t'
