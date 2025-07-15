@@ -21,6 +21,8 @@ parser.add_argument('--momentum', default=0.9, type=float)
 parser.add_argument('--weight-decay', default=5e-4, type=float)
 parser.add_argument('--lr_decay_epoch', default=[5, 80, 120, 175], nargs='+', type=int,
                     help='epochs to decay learning rate')
+parser.add_argument('--temperature', default=4, type=float, help='temperature for softmax')
+parser.add_argument('--normalize_logits', default=False, type=bool, help='normalize logits by std')
 parser.add_argument('--print_freq', default=100, type=int)
 parser.add_argument('--seed', type=int, default=1)
 parser.add_argument('--prefetch', type=int, default=0)
@@ -126,8 +128,12 @@ def test(model, test_loader):
         test_loss, correct, len(test_loader.dataset), acc))
     return acc
 
-def kd_loss_fn(student_logits, teacher_logits, target, T=4):
+def kd_loss_fn(student_logits, teacher_logits, target, T=args.temperature, normalize=args.normalize_logits):
     """Returns hard_loss (CE with gt) and soft_loss (KL with teacher) per sample"""
+    if normalize:
+        # devide logits by stadnard deviation
+        student_logits = student_logits / student_logits.std(dim=1, keepdim=True)
+        teacher_logits = teacher_logits / teacher_logits.std(dim=1, keepdim=True)
     hard_loss = F.cross_entropy(student_logits, target, reduction='none')
     log_student = F.log_softmax(student_logits / T, dim=1)
     soft_teacher = F.softmax(teacher_logits / T, dim=1)
@@ -165,6 +171,7 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
 
         try:
             inputs_val, targets_val = next(valid_loader_iter)
+            # shape inputs_val: (batch_size, 3, 32, 32), targets_val: (batch_size)
         except StopIteration:
             valid_loader_iter = iter(valid_loader)
             inputs_val, targets_val = next(valid_loader_iter)
@@ -172,8 +179,10 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
         with torch.no_grad():
             outputs_teacher_val = teacher(inputs_val)
         outputs_val_student = meta_model(inputs_val)
-        l_g_meta = F.cross_entropy(outputs_val_student, targets_val)
-        # NOTE: l_g_meta use only L_CE, not KD loss
+        # l_g_meta = F.cross_entropy(outputs_val_student, targets_val)
+        hard_loss, soft_loss = kd_loss_fn(outputs_val_student, outputs_teacher_val, targets_val)
+        l_g_meta = torch.mean(hard_loss + soft_loss)  # l_g_meta = hard_loss + soft_loss
+
         prec_meta = accuracy(outputs_val_student.data, targets_val.data, topk=(1,))[0]
 
         optimizer_vnet.zero_grad()
