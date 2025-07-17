@@ -47,18 +47,18 @@ def build_dataset():
         transforms.ToTensor(),
         normalize
     ])
-    if args.dataset == 'cifar10':
-        train_data = CIFAR10(
-            root='../data', train=True, valid=False, num_valid=args.num_valid, transform=train_transform, download=True, seed=args.seed)
-        valid_data = CIFAR10(
-            root='../data', train=True, valid=True, num_valid=args.num_valid, transform=train_transform, download=True, seed=args.seed)
-        test_data = CIFAR10(root='../data', train=False, transform=test_transform, download=True)
-    elif args.dataset == 'cifar100':
-        train_data = CIFAR100(
-            root='../data', train=True, valid=False, num_valid=args.num_valid, transform=train_transform, download=True, seed=args.seed)
-        valid_data = CIFAR100(
-            root='../data', train=True, valid=True, num_valid=args.num_valid, transform=train_transform, download=True, seed=args.seed)
-        test_data = CIFAR100(root='../data', train=False, transform=test_transform, download=True)
+    # if args.dataset == 'cifar10':
+    #     train_data = CIFAR10(
+    #         root='../data', train=True, valid=False, num_valid=args.num_valid, transform=train_transform, download=True, seed=args.seed)
+    #     valid_data = CIFAR10(
+    #         root='../data', train=True, valid=True, num_valid=args.num_valid, transform=train_transform, download=True, seed=args.seed)
+    #     test_data = CIFAR10(root='../data', train=False, transform=test_transform, download=True)
+    # elif args.dataset == 'cifar100':
+    train_data = CIFAR100(
+        root='../data', train=True, valid=False, num_valid=args.num_valid, transform=train_transform, download=True, seed=args.seed)
+    valid_data = CIFAR100(
+        root='../data', train=True, valid=True, num_valid=args.num_valid, transform=train_transform, download=True, seed=args.seed)
+    test_data = CIFAR100(root='../data', train=False, transform=test_transform, download=True)
 
     train_loader = torch.utils.data.DataLoader(
         train_data, batch_size=args.batch_size, shuffle=True,
@@ -179,9 +179,11 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
         with torch.no_grad():
             outputs_teacher_val = teacher(inputs_val)
         outputs_val_student = meta_model(inputs_val)
-        # l_g_meta = F.cross_entropy(outputs_val_student, targets_val)
-        hard_loss, soft_loss = kd_loss_fn(outputs_val_student, outputs_teacher_val, targets_val)
-        l_g_meta = torch.mean(hard_loss + soft_loss)  # l_g_meta = hard_loss + soft_loss
+        
+        l_g_meta = F.cross_entropy(outputs_val_student, targets_val)
+
+        # hard_loss, soft_loss = kd_loss_fn(outputs_val_student, outputs_teacher_val, targets_val)
+        # l_g_meta = torch.mean(hard_loss + soft_loss)  # l_g_meta = hard_loss + soft_loss
 
         prec_meta = accuracy(outputs_val_student.data, targets_val.data, topk=(1,))[0]
 
