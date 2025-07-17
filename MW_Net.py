@@ -21,6 +21,7 @@ parser.add_argument('--momentum', default=0.9, type=float)
 parser.add_argument('--weight-decay', default=5e-4, type=float)
 parser.add_argument('--lr_decay_epoch', default=[5, 80, 120, 175], nargs='+', type=int,
                     help='epochs to decay learning rate')
+parser.add_argument('--reload_at_decay_epoch', default=False, type=bool)
 parser.add_argument('--temperature', default=4, type=float, help='temperature for softmax')
 parser.add_argument('--normalize_logits', default=False, type=bool, help='normalize logits by std')
 parser.add_argument('--print_freq', default=100, type=int)
@@ -110,10 +111,11 @@ def adjust_learning_rate(optimizer, epoch, model=None, vnet=None):
         if epoch == e:
             for param_group in optimizer.param_groups:
                 param_group['lr'] *= 0.1
-            if model is not None:
-                model.load_state_dict(torch.load(f'checkpoint_{args.dataset}.pth')['student'])
-            if vnet is not None:
-                vnet.load_state_dict(torch.load(f'checkpoint_{args.dataset}.pth')['vnet'])
+            if args.reload_at_decay_epoch:
+                if model is not None:
+                    model.load_state_dict(torch.load(f'checkpoint_{args.dataset}.pth')['student'])
+                if vnet is not None:
+                    vnet.load_state_dict(torch.load(f'checkpoint_{args.dataset}.pth')['vnet'])
         # if epoch >= e:
         #     args.lr *= 0.1
         #     print(f'Adjust learning rate to {args.lr} at epoch {epoch}')
