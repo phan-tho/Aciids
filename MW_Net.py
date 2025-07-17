@@ -102,14 +102,29 @@ def accuracy(output, target, topk=(1,)):
         res.append(correct_k.mul_(100.0 / batch_size))
     return res
 
-def adjust_learning_rate(optimizer, epoch):
+def adjust_learning_rate(optimizer, epoch, model=None, vnet=None):
+    # if model is not None. load state dict best currently model at epoch in lr_decay_epoch
     # lr = args.lr * ((0.1 ** int(epoch >= 80)) * (0.1 ** int(epoch >= 100)))
-    lr = args.lr
+
     for e in args.lr_decay_epoch:
-        if epoch >= e:
-            lr *= 0.1
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = lr
+        if epoch == e:
+            for param_group in optimizer.param_groups:
+                param_group['lr'] *= 0.1
+            if model is not None:
+                model.load_state_dict(torch.load(f'checkpoint_{args.dataset}.pth')['student'])
+            if vnet is not None:
+                vnet.load_state_dict(torch.load(f'checkpoint_{args.dataset}.pth')['vnet'])
+        # if epoch >= e:
+        #     args.lr *= 0.1
+        #     print(f'Adjust learning rate to {args.lr} at epoch {epoch}')
+        #     break
+
+    # lr = args.lr
+    # for e in args.lr_decay_epoch:
+    #     if epoch >= e:
+    #         lr *= 0.1
+    # for param_group in optimizer.param_groups:
+    #     param_group['lr'] = lr
 
 def test(model, test_loader):
     model.eval()
@@ -229,7 +244,7 @@ def main():
 
     best_acc = 0
     for epoch in range(args.epochs):
-        adjust_learning_rate(optimizer_model, epoch)
+        adjust_learning_rate(optimizer_model, epoch, model)
         train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, optimizer_vnet, epoch)
         test_acc = test(model=model, test_loader=test_loader)
         if test_acc >= best_acc:
