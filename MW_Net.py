@@ -160,7 +160,7 @@ def test(model, test_loader, epoch):
     log = {'loss_test': float(test_loss), 'acc_test': float(acc)}
     with open(args.name_file_log, 'r+') as f:
         data = json.load(f)
-        data[str(epoch)]['test'] = log
+        data[str(epoch + 1)]['test'] = log
         f.seek(0)
         json.dump(data, f, indent=4)
         f.truncate()
