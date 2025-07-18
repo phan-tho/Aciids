@@ -254,8 +254,6 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
         train_loss += loss.item()
         meta_loss += l_g_meta.item()
 
-        train_loss /= (batch_idx + 1)
-        meta_loss /= (batch_idx + 1)
         if (batch_idx + 1) % args.print_freq == 0:
             print('Epoch: [%d/%d]\t'
                   'Iters: [%d/%d]\t'
@@ -264,16 +262,17 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
                   'Prec@1 %.2f\t'
                   'Prec_meta@1 %.2f' % (
                       (epoch + 1), args.epochs, batch_idx + 1, len(train_loader.dataset)/args.batch_size,
-                      train_loss, meta_loss, prec_train, prec_meta))
+                      train_loss / (batch_idx + 1), meta_loss / (batch_idx + 1), prec_train, prec_meta))
+    # end of epoch
 
-        log = {'train': {'loss_train': float(train_loss), 'acc_train': float(prec_train), 'loss_meta': float(meta_loss), 'acc_meta': float(prec_meta)}}
-        # save log to json file
-        with open(args.name_file_log, 'r+') as f:
-            data = json.load(f)
-            data[str(epoch + 1)] = log
-            f.seek(0)
-            json.dump(data, f, indent=4)
-            f.truncate()
+    log = {'train': {'loss_train': float(train_loss / (batch_idx + 1)), 'acc_train': float(prec_train), 'loss_meta': float(meta_loss / (batch_idx + 1)), 'acc_meta': float(prec_meta)}}
+    # save log to json file
+    with open(args.name_file_log, 'r+') as f:
+        data = json.load(f)
+        data[str(epoch + 1)] = log
+        f.seek(0)
+        json.dump(data, f, indent=4)
+        f.truncate()
 
 def main():
     # Set up logging
