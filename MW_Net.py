@@ -51,18 +51,18 @@ def build_dataset():
         transforms.ToTensor(),
         normalize
     ])
-    # if args.dataset == 'cifar10':
-    #     train_data = CIFAR10(
-    #         root='../data', train=True, valid=False, num_valid=args.num_valid, transform=train_transform, download=True, seed=args.seed)
-    #     valid_data = CIFAR10(
-    #         root='../data', train=True, valid=True, num_valid=args.num_valid, transform=train_transform, download=True, seed=args.seed)
-    #     test_data = CIFAR10(root='../data', train=False, transform=test_transform, download=True)
-    # elif args.dataset == 'cifar100':
-    train_data = CIFAR100(
-        root='../data', train=True, valid=False, num_valid=args.num_valid, transform=train_transform, download=True, seed=args.seed)
-    valid_data = CIFAR100(
-        root='../data', train=True, valid=True, num_valid=args.num_valid, transform=train_transform, download=True, seed=args.seed)
-    test_data = CIFAR100(root='../data', train=False, transform=test_transform, download=True)
+    if args.dataset == 'cifar10':
+        train_data = CIFAR10(
+            root='../data', train=True, valid=False, num_valid=args.num_valid, transform=train_transform, download=True, seed=args.seed)
+        valid_data = CIFAR10(
+            root='../data', train=True, valid=True, num_valid=args.num_valid, transform=train_transform, download=True, seed=args.seed)
+        test_data = CIFAR10(root='../data', train=False, transform=test_transform, download=True)
+    elif args.dataset == 'cifar100':
+        train_data = CIFAR100(
+            root='../data', train=True, valid=False, num_valid=args.num_valid, transform=train_transform, download=True, seed=args.seed)
+        valid_data = CIFAR100(
+            root='../data', train=True, valid=True, num_valid=args.num_valid, transform=train_transform, download=True, seed=args.seed)
+        test_data = CIFAR100(root='../data', train=False, transform=test_transform, download=True)
 
     train_loader = torch.utils.data.DataLoader(
         train_data, batch_size=args.batch_size, shuffle=True,
@@ -264,6 +264,12 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
             f.truncate()
 
 def main():
+    # Set up logging
+    if not os.path.exists(args.name_file_log):
+        with open(args.name_file_log, 'w') as f:
+            json.dump({}, f, indent=4)
+
+    
     train_loader, valid_loader, test_loader = build_dataset()
     model = build_student()
     teacher = load_teacher()
