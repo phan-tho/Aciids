@@ -35,6 +35,18 @@ parser.add_argument('--l_meta', default='mix', help='mix/only hard/only soft')
 parser.set_defaults(augment=True)
 args = parser.parse_args()
 
+"""Save args to a json file"""
+if not os.path.exists('args.json'):
+    with open('args.json', 'w') as f:
+        json.dump(vars(args), f, indent=4)
+else:
+    with open('args.json', 'r+') as f:
+        data = json.load(f)
+        data.update(vars(args))
+        f.seek(0)
+        json.dump(data, f, indent=4)
+        f.truncate()
+
 torch.manual_seed(args.seed)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -128,7 +140,7 @@ def adjust_learning_rate(optimizer, epoch, model=None, vnet=None):
     # for param_group in optimizer.param_groups:
     #     param_group['lr'] = lr
 
-def test(model, test_loader):
+def test(model, test_loader, epoch):
     model.eval()
     correct = 0
     test_loss = 0
@@ -143,17 +155,12 @@ def test(model, test_loader):
     acc = 100. * correct / len(test_loader.dataset)
     print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.4f}%)\n'.format(
         test_loss, correct, len(test_loader.dataset), acc))
-    
-    # if isinstance(test_loss, torch.Tensor) or isinstance(test_loss, torch.cuda.FloatTensor):
-    #     test_loss = test_loss.cpu().numpy()
-    # if isinstance(acc, torch.Tensor) or isinstance(acc, torch.cuda.FloatTensor):
-    #     acc = acc.cpu().numpy()
 
     # save test loss and acc to json file
     log = {'loss_test': float(test_loss), 'acc_test': float(acc)}
     with open(args.name_file_log, 'r+') as f:
         data = json.load(f)
-        data[str(args.epochs)]['test'] = log
+        data[str(epoch)]['test'] = log
         f.seek(0)
         json.dump(data, f, indent=4)
         f.truncate()
@@ -259,17 +266,6 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
                       (epoch + 1), args.epochs, batch_idx + 1, len(train_loader.dataset)/args.batch_size,
                       train_loss, meta_loss, prec_train, prec_meta))
 
-        # if is instance torch.Tensor or torch.cuda.FloatTensor
-        # if isinstance(train_loss, torch.Tensor) or isinstance(train_loss, torch.cuda.FloatTensor):
-        #     train_loss = train_loss.cpu().numpy()
-        # if isinstance(meta_loss, torch.Tensor) or isinstance(meta_loss, torch.cuda.FloatTensor):
-        #     meta_loss = meta_loss.cpu().numpy()
-        # if isinstance(prec_train, torch.Tensor) or isinstance(prec_train, torch.cuda.FloatTensor):
-        #     prec_train = prec_train.cpu().numpy()
-        # if isinstance(prec_meta, torch.Tensor) or isinstance(prec_meta, torch.cuda.FloatTensor):
-        #     prec_meta = prec_meta.cpu().numpy() 
-
-
         log = {'train': {'loss_train': float(train_loss), 'acc_train': float(prec_train), 'loss_meta': float(meta_loss), 'acc_meta': float(prec_meta)}}
         # save log to json file
         with open(args.name_file_log, 'r+') as f:
@@ -298,7 +294,7 @@ def main():
     for epoch in range(args.epochs):
         adjust_learning_rate(optimizer_model, epoch, model)
         train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, optimizer_vnet, epoch)
-        test_acc = test(model=model, test_loader=test_loader)
+        test_acc = test(model=model, test_loader=test_loader, epoch=epoch)
         if test_acc >= best_acc:
             best_acc = test_acc
             ckpt = {
