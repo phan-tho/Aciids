@@ -144,6 +144,11 @@ def test(model, test_loader):
     print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.4f}%)\n'.format(
         test_loss, correct, len(test_loader.dataset), acc))
     
+    if isinstance(test_loss, torch.Tensor) or isinstance(test_loss, torch.cuda.FloatTensor):
+        test_loss = test_loss.cpu().numpy()
+    if isinstance(acc, torch.Tensor) or isinstance(acc, torch.cuda.FloatTensor):
+        acc = acc.cpu().numpy()
+
     # save test loss and acc to json file
     log = {'loss_test': test_loss, 'acc_test': acc}
     with open(args.name_file_log, 'r+') as f:
@@ -253,6 +258,16 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
                   'Prec_meta@1 %.2f' % (
                       (epoch + 1), args.epochs, batch_idx + 1, len(train_loader.dataset)/args.batch_size,
                       train_loss, meta_loss, prec_train, prec_meta))
+
+        # if is instance torch.Tensor or torch.cuda.FloatTensor
+        if isinstance(train_loss, torch.Tensor) or isinstance(train_loss, torch.cuda.FloatTensor):
+            train_loss = train_loss.cpu().numpy()
+        if isinstance(meta_loss, torch.Tensor) or isinstance(meta_loss, torch.cuda.FloatTensor):
+            meta_loss = meta_loss.cpu().numpy()
+        if isinstance(prec_train, torch.Tensor) or isinstance(prec_train, torch.cuda.FloatTensor):
+            prec_train = prec_train.cpu().numpy()
+        if isinstance(prec_meta, torch.Tensor) or isinstance(prec_meta, torch.cuda.FloatTensor):
+            prec_meta = prec_meta.cpu().numpy()
 
         log = {'train': {'loss_train': train_loss, 'acc_train': prec_train, 'loss_meta': meta_loss, 'acc_meta': prec_meta}}
         # save log to json file
