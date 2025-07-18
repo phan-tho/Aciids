@@ -185,6 +185,9 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
     meta_loss = 0
     valid_loader_iter = iter(valid_loader)
 
+    total_prec_train = 0
+    total_prec_meta = 0
+
     for batch_idx, (inputs, targets) in enumerate(train_loader):
         model.train()
         inputs, targets = inputs.to(device), targets.to(device)
@@ -254,6 +257,9 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
         train_loss += loss.item()
         meta_loss += l_g_meta.item()
 
+        total_prec_train += prec_train.item()
+        total_prec_meta += prec_meta.item()
+
         if (batch_idx + 1) % args.print_freq == 0:
             print('Epoch: [%d/%d]\t'
                   'Iters: [%d/%d]\t'
@@ -265,7 +271,7 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
                       train_loss / (batch_idx + 1), meta_loss / (batch_idx + 1), prec_train, prec_meta))
     # end of epoch
 
-    log = {'train': {'loss_train': float(train_loss / (batch_idx + 1)), 'acc_train': float(prec_train), 'loss_meta': float(meta_loss / (batch_idx + 1)), 'acc_meta': float(prec_meta)}}
+    log = {'train': {'loss_train': float(train_loss / (batch_idx + 1)), 'acc_train': float(total_prec_train / (batch_idx + 1)), 'loss_meta': float(meta_loss / (batch_idx + 1)), 'acc_meta': float(total_prec_meta / (batch_idx + 1))}}
     # save log to json file
     with open(args.name_file_log, 'r+') as f:
         data = json.load(f)
@@ -290,12 +296,14 @@ def main():
     optimizer_vnet = torch.optim.Adam(vnet.params(), 1e-3, weight_decay=1e-4)
 
     best_acc = 0
+    at_e = 0
     for epoch in range(args.epochs):
         adjust_learning_rate(optimizer_model, epoch, model)
         train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, optimizer_vnet, epoch)
         test_acc = test(model=model, test_loader=test_loader, epoch=epoch)
         if test_acc >= best_acc:
             best_acc = test_acc
+            at_e = epoch
             ckpt = {
                 'student': model.state_dict(),
                 'vnet': vnet.state_dict(),
@@ -304,7 +312,7 @@ def main():
             }
             torch.save(ckpt, f'checkpoint_{args.dataset}.pth')
         
-    print('best accuracy:', best_acc)
+    print(f'Best acc: {best_acc} at epoch {at_e + 1}')
 
 if __name__ == '__main__':
     main()
