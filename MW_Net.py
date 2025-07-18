@@ -2,6 +2,8 @@ import argparse
 import os
 import time
 
+import json
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -28,7 +30,8 @@ parser.add_argument('--print_freq', default=100, type=int)
 parser.add_argument('--seed', type=int, default=1)
 parser.add_argument('--prefetch', type=int, default=0)
 parser.add_argument('--teacher_ckpt', default='teacher_resnet32_cifar10.pt', type=str)
-parser.add_argument('--student_arc', default='old', help='student architecture (old/new), new is resnet8x4 build in newresnet.py')
+parser.add_argument('--name_file_log', default='log_loss.json', type=str, help='file to save log')
+parser.add_argument('--l_meta', default='mix', help='mix/only hard/only soft')
 parser.set_defaults(augment=True)
 args = parser.parse_args()
 
@@ -73,12 +76,9 @@ def build_dataset():
 
 def build_student():
     num_classes = 10 if args.dataset == 'cifar10' else 100
-    if args.student_arc == 'old':
-        return StudentResNet(num_classes=num_classes, num_blocks=[1, 1, 1]).to(device)
-    else:
-        import newresnet as newresnet
+    import newresnet as newresnet
 
-        return newresnet.meta_resnet8x4(num_classes=num_classes).to(device)
+    return newresnet.meta_resnet8x4(num_classes=num_classes).to(device)
     # return model
 
 def load_teacher():
@@ -143,6 +143,16 @@ def test(model, test_loader):
     acc = 100. * correct / len(test_loader.dataset)
     print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.4f}%)\n'.format(
         test_loss, correct, len(test_loader.dataset), acc))
+    
+    # save test loss and acc to json file
+    log = {'loss_test': test_loss, 'acc_test': acc}
+    with open(args.name_file_log, 'r+') as f:
+        data = json.load(f)
+        data[str(args.epochs)]['test'] = log
+        f.seek(0)
+        json.dump(data, f, indent=4)
+        f.truncate()
+
     return acc
 
 def kd_loss_fn(student_logits, teacher_logits, target, T=args.temperature, normalize=args.normalize_logits):
@@ -197,7 +207,13 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
             outputs_teacher_val = teacher(inputs_val)
         outputs_val_student = meta_model(inputs_val)
         
-        l_g_meta = F.cross_entropy(outputs_val_student, targets_val)
+        hard_loss, soft_loss = kd_loss_fn(outputs_val_student, outputs_teacher_val, targets_val)
+        if args.l_meta == 'mix':
+            l_g_meta = torch.mean(hard_loss + soft_loss)  # l_g_meta = hard_loss + soft_loss
+        elif args.l_meta == 'hard':
+            l_g_meta = torch.mean(hard_loss)  # l_g_meta = hard_loss
+        else: # args.l_meta == 'soft'
+            l_g_meta = torch.mean(soft_loss)  # l_g_meta = soft_loss
 
         # hard_loss, soft_loss = kd_loss_fn(outputs_val_student, outputs_teacher_val, targets_val)
         # l_g_meta = torch.mean(hard_loss + soft_loss)  # l_g_meta = hard_loss + soft_loss
@@ -225,6 +241,9 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
 
         train_loss += loss.item()
         meta_loss += l_g_meta.item()
+
+        train_loss /= (batch_idx + 1)
+        meta_loss /= (batch_idx + 1)
         if (batch_idx + 1) % args.print_freq == 0:
             print('Epoch: [%d/%d]\t'
                   'Iters: [%d/%d]\t'
@@ -233,7 +252,16 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
                   'Prec@1 %.2f\t'
                   'Prec_meta@1 %.2f' % (
                       (epoch + 1), args.epochs, batch_idx + 1, len(train_loader.dataset)/args.batch_size,
-                      (train_loss / (batch_idx + 1)), (meta_loss / (batch_idx + 1)), prec_train, prec_meta))
+                      train_loss, meta_loss, prec_train, prec_meta))
+
+        log = {'train': {'loss_train': train_loss, 'acc_train': prec_train, 'loss_meta': meta_loss, 'acc_meta': prec_meta}}
+        # save log to json file
+        with open(args.name_file_log, 'r+') as f:
+            data = json.load(f)
+            data[str(epoch + 1)] = log
+            f.seek(0)
+            json.dump(data, f, indent=4)
+            f.truncate()
 
 def main():
     train_loader, valid_loader, test_loader = build_dataset()
