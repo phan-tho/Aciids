@@ -159,7 +159,11 @@ def train(train_loader, valid_loader, model, teacher, model_optimizer, real_mode
         # reuse inner_adapt to conduct real update based on learned meta weights
         # inner_loss = model.inner_loss(train_x, train_y)
         for _ in range(1):
-            inner_loss = inner_loss(model, teacher, train_x, train_y, epsilon)
+            outputs_student = model(train_x)
+            lce, lkl = kd_loss_fn(outputs_student, outputs_teacher, train_y, args.temperature, args.normalize_logits)
+            inner_loss = torch.sum(epsilon[:, 0] * lce + epsilon[:, 1] * lkl)
+            inner_loss /= train_x.size(0)
+            # inner_loss = inner_loss(model, teacher, train_x, train_y, epsilon)
             real_model_optimizer.zero_grad()
             inner_loss.backward()
             real_model_optimizer.step()
