@@ -53,10 +53,10 @@ else:
         json.dump(data, f, indent=4)
         f.truncate()
 
-torch.manual_seed(args.seed)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 args.device = device
 args.seed = 12
+torch.manual_seed(args.seed)
 
 
 def build_student():
