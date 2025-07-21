@@ -139,7 +139,6 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
 
         w_hard = v_lambda[:, 0:1]
         w_soft = v_lambda[:, 1:2]
-        print(f'hard_loss: {hard_loss}, soft_loss: {soft_loss}')
         loss = torch.sum(w_hard * hard_loss.unsqueeze(1) + w_soft * soft_loss.unsqueeze(1)) / len(cost)
 
         optimizer_model.zero_grad()
