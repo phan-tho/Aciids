@@ -1,6 +1,5 @@
 import argparse
 import os
-import time
 
 import json
 
@@ -94,8 +93,8 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
             v_lambda = vnet(outputs_teacher.data)
 
         # v_lambda = vnet(cost.data)
-        w_hard = v_lambda[:, 0] # shape (batch_size, 1)
-        w_soft = v_lambda[:, 1] # shape (batch_size, 1)
+        w_hard = v_lambda[:, 0:1] # shape (batch_size, 1)
+        w_soft = v_lambda[:, 1:2] # shape (batch_size, 1)
         l_f_meta = torch.sum(w_hard * hard_loss.unsqueeze(1) + w_soft * soft_loss.unsqueeze(1)) / len(cost)
         meta_model.zero_grad()
         grads = torch.autograd.grad(l_f_meta, (meta_model.params()), create_graph=True)
@@ -138,8 +137,9 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
             elif args.input_vnet == 'logits_teacher':
                 v_lambda = vnet(outputs_teacher)
 
-        w_hard = v_lambda[:, 0]
-        w_soft = v_lambda[:, 1]
+        w_hard = v_lambda[:, 0:1]
+        w_soft = v_lambda[:, 1:2]
+        print(f'hard_loss: {hard_loss}, soft_loss: {soft_loss}')
         loss = torch.sum(w_hard * hard_loss.unsqueeze(1) + w_soft * soft_loss.unsqueeze(1)) / len(cost)
 
         optimizer_model.zero_grad()
@@ -165,6 +165,7 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
                   'Prec_meta@1 %.2f' % (
                       (epoch + 1), args.epochs, batch_idx + 1, len(train_loader.dataset)/args.batch_size,
                       train_loss / (batch_idx + 1), meta_loss / (batch_idx + 1), prec_train, prec_meta))
+            
     # end of epoch
     if epoch % args.log_weight_freq == 0:
         log = {str(epoch + 1): v_lambda.cpu().numpy().tolist()}
