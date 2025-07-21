@@ -28,17 +28,16 @@ parser.add_argument('--momentum', default=0.9, type=float)
 parser.add_argument('--weight-decay', default=5e-4, type=float)
 parser.add_argument('--lr_decay_epoch', default=[5, 80, 120, 175], nargs='+', type=int,
                     help='epochs to decay learning rate')
-parser.add_argument('--reload_at_decay_epoch', default=False, type=bool)
 parser.add_argument('--temperature', default=4, type=float, help='temperature for softmax')
 parser.add_argument('--normalize_logits', default=False, type=bool, help='normalize logits by std')
 parser.add_argument('--print_freq', default=100, type=int)
-parser.add_argument('--seed', type=int, default=1)
 parser.add_argument('--prefetch', type=int, default=0)
 parser.add_argument('--teacher_ckpt', default='teacher_resnet32_cifar10.pt', type=str)
 parser.add_argument('--name_file_log', default='log_loss.json', type=str, help='file to save log')
 parser.add_argument('--log_weight_path', default='log_weight.json', type=str, help='file to save log weight')
 parser.add_argument('--log_weight_freq', default=10, type=int, help='log weight after n epochs')
 parser.add_argument('--l_meta', default='mix', help='mix/only hard/only soft')
+parser.add_argument('--input_vnet', default='loss', type=str, help='input to vnet (loss/logits_teacher/feature_teacher)')
 parser.set_defaults(augment=True)
 args = parser.parse_args()
 
@@ -57,6 +56,7 @@ else:
 torch.manual_seed(args.seed)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 args.device = device
+args.seed = 12
 
 
 def build_student():
@@ -85,11 +85,17 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
         meta_model.to(device)
 
         outputs_student = meta_model(inputs)
-        hard_loss, soft_loss = kd_loss_fn(outputs_student, outputs_teacher, targets, args.temperature, args.normalize_logits)
-        cost = torch.stack([hard_loss, soft_loss], dim=1) # shape [batch, 2]
-        v_lambda = vnet(cost.data)
-        w_hard = v_lambda[:, 0:1] # shape (batch_size, 1)
-        w_soft = v_lambda[:, 1:2] # shape (batch_size, 1)
+
+        if args.input_vnet == 'loss':
+            hard_loss, soft_loss = kd_loss_fn(outputs_student, outputs_teacher, targets, args.temperature, args.normalize_logits)
+            cost = torch.stack([hard_loss, soft_loss], dim=1) # shape [batch, 2]
+            v_lambda = vnet(cost.data)
+        elif args.input_vnet == 'logits_teacher':
+            v_lambda = vnet(outputs_teacher.data)
+
+        # v_lambda = vnet(cost.data)
+        w_hard = v_lambda[:, 0] # shape (batch_size, 1)
+        w_soft = v_lambda[:, 1] # shape (batch_size, 1)
         l_f_meta = torch.sum(w_hard * hard_loss.unsqueeze(1) + w_soft * soft_loss.unsqueeze(1)) / len(cost)
         meta_model.zero_grad()
         grads = torch.autograd.grad(l_f_meta, (meta_model.params()), create_graph=True)
@@ -121,12 +127,19 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
 
         # Step 2: Main model update
         outputs_student = model(inputs)
-        hard_loss, soft_loss = kd_loss_fn(outputs_student, outputs_teacher, targets, args.temperature, args.normalize_logits)
-        cost = torch.stack([hard_loss, soft_loss], dim=1)
+        # hard_loss, soft_loss = kd_loss_fn(outputs_student, outputs_teacher, targets, args.temperature, args.normalize_logits)
+        # cost = torch.stack([hard_loss, soft_loss], dim=1)
         with torch.no_grad():
-            v_lambda = vnet(cost)
-        w_hard = v_lambda[:, 0:1]
-        w_soft = v_lambda[:, 1:2]
+            # v_lambda = vnet(cost)
+            if args.input_vnet == 'loss':
+                hard_loss, soft_loss = kd_loss_fn(outputs_student, outputs_teacher, targets, args.temperature, args.normalize_logits)
+                cost = torch.stack([hard_loss, soft_loss], dim=1) # shape [batch, 2]
+                v_lambda = vnet(cost)
+            elif args.input_vnet == 'logits_teacher':
+                v_lambda = vnet(outputs_teacher)
+
+        w_hard = v_lambda[:, 0]
+        w_soft = v_lambda[:, 1]
         loss = torch.sum(w_hard * hard_loss.unsqueeze(1) + w_soft * soft_loss.unsqueeze(1)) / len(cost)
 
         optimizer_model.zero_grad()
@@ -185,7 +198,12 @@ def main():
     train_loader, valid_loader, test_loader = build_dataset(args=args)
     model = build_student()
     teacher = load_teacher(args)
-    vnet = VNet(2, 100, 2).to(device)  # input=2 (hard/soft loss), output=2 (weight cho mỗi loss)
+    if args.input_vnet == 'loss':
+        vnet = VNet(2, 100, 2).to(device)  # input=2 (hard/soft loss), output=2 (weight cho mỗi loss)
+    elif args.input_vnet == 'logits_teacher':
+        vnet = VNet(100, 200, 2).to(device)  # input=100 (features), output=2 (weight cho mỗi loss)
+    elif args.input_vnet == 'feature_teacher':
+        vnet = VNet(512, 200, 2).to(device)
     optimizer_model = torch.optim.SGD(model.params(), args.lr,
                                       momentum=args.momentum, weight_decay=args.weight_decay)
     optimizer_vnet = torch.optim.Adam(vnet.params(), 1e-3, weight_decay=1e-4)
