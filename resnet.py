@@ -364,10 +364,3 @@ class VNet(MetaModule):
         # x = self.relu1(x)
         out = self.linear2(x)
         return F.softmax(out, dim=1)
-
-
-
-
-
-
-

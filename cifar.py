@@ -3,6 +3,8 @@ import os
 import numpy as np
 import sys
 import pickle
+import torch
+import torchvision.transforms as transforms
 import torch.utils.data as data
 from torchvision.datasets.utils import download_url, check_integrity
 
@@ -178,3 +180,57 @@ class CIFAR100(CIFAR10):
             self.data = entry['data']
             self.labels = entry['fine_labels']
             self.data = self.data.reshape((10000, 3, 32, 32)).transpose((0, 2, 3, 1))  # HWC
+
+def build_dummy_dataset(args):
+    """Build a dummy dataset for testing purposes."""
+    # cretae some random data have shape (16, 3, 32, 32)
+    # create dalaloader for train, valid, test
+    if args.dataset == 'cifar10':
+        num_classes = 10
+    elif args.dataset == 'cifar100':
+        num_classes = 100        
+
+    train_data = torch.randn(16, 3, 32, 32)
+    train_labels = torch.randint(0, num_classes, (16,))
+
+    train_loader = torch.utils.data.DataLoader(list(zip(train_data, train_labels)), batch_size=4)
+    valid_loader = torch.utils.data.DataLoader(list(zip(train_data, train_labels)), batch_size=4)
+    test_loader = torch.utils.data.DataLoader(list(zip(train_data, train_labels)), batch_size=4)
+
+    return train_loader, valid_loader, test_loader
+
+def build_dataset(args):
+    normalize = transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
+                                     std=[0.2023, 0.1994, 0.2010])
+    train_transform = transforms.Compose([
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        normalize,
+    ])
+    test_transform = transforms.Compose([
+        transforms.ToTensor(),
+        normalize
+    ])
+    if args.dataset == 'cifar10':
+        train_data = CIFAR10(
+            root='../data', train=True, valid=False, num_valid=args.num_valid, transform=train_transform, download=True, seed=args.seed)
+        valid_data = CIFAR10(
+            root='../data', train=True, valid=True, num_valid=args.num_valid, transform=train_transform, download=True, seed=args.seed)
+        test_data = CIFAR10(root='../data', train=False, transform=test_transform, download=True)
+    elif args.dataset == 'cifar100':
+        train_data = CIFAR100(
+            root='../data', train=True, valid=False, num_valid=args.num_valid, transform=train_transform, download=True, seed=args.seed)
+        valid_data = CIFAR100(
+            root='../data', train=True, valid=True, num_valid=args.num_valid, transform=train_transform, download=True, seed=args.seed)
+        test_data = CIFAR100(root='../data', train=False, transform=test_transform, download=True)
+
+    train_loader = torch.utils.data.DataLoader(
+        train_data, batch_size=args.batch_size, shuffle=True,
+        num_workers=args.prefetch, pin_memory=True)
+    valid_loader = torch.utils.data.DataLoader(
+        valid_data, batch_size=args.batch_size, shuffle=True,
+        num_workers=args.prefetch, pin_memory=True)
+    test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.batch_size, shuffle=False,
+                                              num_workers=args.prefetch, pin_memory=True)
+    return train_loader, valid_loader, test_loader
