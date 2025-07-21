@@ -42,6 +42,8 @@ parser.add_argument('--seed', type=int, default=1)
 parser.add_argument('--prefetch', type=int, default=0)
 parser.add_argument('--teacher_ckpt', default='teacher_resnet32_cifar10.pt', type=str)
 parser.add_argument('--name_file_log', default='log_loss.json', type=str, help='file to save log')
+parser.add_argument('--log_weight_path', default='log_weight.json', type=str, help='file to save log weight')
+parser.add_argument('--log_weight_freq', default=10, type=int, help='log weight after n epochs')
 parser.add_argument('--l_meta', default='hard', help='mix/only hard/only soft')
 parser.set_defaults(augment=True)
 args = parser.parse_args()
@@ -54,6 +56,9 @@ def main():
     # Set up logging
     if not os.path.exists(args.name_file_log):
         with open(args.name_file_log, 'w') as f:
+            json.dump({}, f, indent=4)
+    if not os.path.exists(args.log_weight_path):
+        with open(args.log_weight_path, 'w') as f:
             json.dump({}, f, indent=4)
 
     # Load dataset
@@ -190,6 +195,15 @@ def train(train_loader, valid_loader, model, teacher, model_optimizer, real_mode
                       (epoch + 1), args.epochs, idx + 1, len(train_loader.dataset)/args.batch_size,
                       train_loss / (idx + 1), meta_loss / (idx + 1), prec_train, prec_meta))
     # end of epoch
+    # save epsilon
+    if epoch % args.log_weight_freq == 0:
+        log = {str(epoch + 1): epsilon.cpu().numpy().tolist()}
+        with open(args.log_weight_path, 'r+') as f:
+            data = json.load(f)
+            data.update(log)
+            f.seek(0)
+            json.dump(data, f, indent=4)
+            f.truncate()
 
     log = {'train': {'loss_train': float(train_loss / (idx + 1)), 'acc_train': float(total_prec_train / (idx + 1)), 'loss_meta': float(meta_loss / (idx + 1)), 'acc_meta': float(total_prec_meta / (idx + 1))}}
     # save log to json file

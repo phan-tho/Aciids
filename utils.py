@@ -51,9 +51,12 @@ def kd_loss_fn(student_logits, teacher_logits, target, T, normalize):
 def load_teacher(args):
     # model = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar10_resnet32", pretrained=True)
     model = teachernet.resnet32x4(num_classes=10 if args.dataset == 'cifar10' else 100)
-    ckt = torch.load(args.teacher_ckpt, map_location=args.device)
-    model.load_state_dict(ckt['net'])
-    print('load teacher acc', ckt['acc@1'])
+    try:
+        ckt = torch.load(args.teacher_ckpt, map_location=args.device)
+        model.load_state_dict(ckt['net'])
+        print('load teacher acc', ckt['acc@1'])
+    except Exception as e:
+        print('Error loading teacher model:', e)
     model.to(args.device)
     return model
 
