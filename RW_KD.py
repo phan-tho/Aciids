@@ -13,7 +13,7 @@ import numpy as np
 
 import teachernet as teachernet
 
-from cifar import build_dataset
+from cifar import build_dataset, build_dummy_dataset
 from utils import test, kd_loss_fn, load_teacher, accuracy, adjust_learning_rate
 # from torch.utils.data import DataLoader
 # from torch.utils.tensorboard import SummaryWriter
@@ -42,7 +42,7 @@ parser.add_argument('--seed', type=int, default=1)
 parser.add_argument('--prefetch', type=int, default=0)
 parser.add_argument('--teacher_ckpt', default='teacher_resnet32_cifar10.pt', type=str)
 parser.add_argument('--name_file_log', default='log_loss.json', type=str, help='file to save log')
-parser.add_argument('--l_meta', default='mix', help='mix/only hard/only soft')
+parser.add_argument('--l_meta', default='hard', help='mix/only hard/only soft')
 parser.set_defaults(augment=True)
 args = parser.parse_args()
 
@@ -58,6 +58,7 @@ def main():
 
     # Load dataset
     train_loader, valid_loader, test_loader = build_dataset(args=args)
+    # train_loader, valid_loader, test_loader = build_dummy_dataset(args=args)
 
     model = teachernet.resnet8x4(num_classes=(100 if args.dataset == 'cifar100' else 10)).to(device)
     teacher = load_teacher(args)
@@ -107,10 +108,10 @@ def train(train_loader, valid_loader, model, teacher, model_optimizer, real_mode
     model.train()
     for idx, (train_x, train_y) in enumerate(train_loader):
         try:
-            valid_x, valid_y = valid.next()
+            valid_x, valid_y = next(valid)
         except BaseException:
             valid = iter(valid_loader)
-            valid_x, valid_y = valid.next()
+            valid_x, valid_y = next(valid)
         train_x, train_y, valid_x, valid_y = (
             train_x.to(args.device),
             train_y.to(args.device),
@@ -142,9 +143,9 @@ def train(train_loader, valid_loader, model, teacher, model_optimizer, real_mode
         lce, lkl = kd_loss_fn(outputs_student_val, outputs_teacher_val, valid_y, args.temperature, args.normalize_logits)
         if args.l_meta == 'mix':
             outer_loss = torch.mean(lce + lkl)
-        elif args.l_meta == 'only_hard':
+        elif args.l_meta == 'hard':
             outer_loss = torch.mean(lce)
-        elif args.l_meta == 'only_soft':
+        elif args.l_meta == 'soft':
             outer_loss = torch.mean(lkl)
         epsilon = -torch.autograd.grad(outer_loss, epsilon)[0]
 
