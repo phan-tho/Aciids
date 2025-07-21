@@ -86,9 +86,9 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
 
         outputs_student = meta_model(inputs)
 
+        hard_loss, soft_loss = kd_loss_fn(outputs_student, outputs_teacher, targets, args.temperature, args.normalize_logits)
+        cost = torch.stack([hard_loss, soft_loss], dim=1) # shape [batch, 2]
         if args.input_vnet == 'loss':
-            hard_loss, soft_loss = kd_loss_fn(outputs_student, outputs_teacher, targets, args.temperature, args.normalize_logits)
-            cost = torch.stack([hard_loss, soft_loss], dim=1) # shape [batch, 2]
             v_lambda = vnet(cost.data)
         elif args.input_vnet == 'logits_teacher':
             v_lambda = vnet(outputs_teacher.data)
@@ -127,13 +127,13 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
 
         # Step 2: Main model update
         outputs_student = model(inputs)
-        # hard_loss, soft_loss = kd_loss_fn(outputs_student, outputs_teacher, targets, args.temperature, args.normalize_logits)
-        # cost = torch.stack([hard_loss, soft_loss], dim=1)
+        hard_loss, soft_loss = kd_loss_fn(outputs_student, outputs_teacher, targets, args.temperature, args.normalize_logits)
+        cost = torch.stack([hard_loss, soft_loss], dim=1)
         with torch.no_grad():
             # v_lambda = vnet(cost)
             if args.input_vnet == 'loss':
-                hard_loss, soft_loss = kd_loss_fn(outputs_student, outputs_teacher, targets, args.temperature, args.normalize_logits)
-                cost = torch.stack([hard_loss, soft_loss], dim=1) # shape [batch, 2]
+                # hard_loss, soft_loss = kd_loss_fn(outputs_student, outputs_teacher, targets, args.temperature, args.normalize_logits)
+                # cost = torch.stack([hard_loss, soft_loss], dim=1) # shape [batch, 2]
                 v_lambda = vnet(cost)
             elif args.input_vnet == 'logits_teacher':
                 v_lambda = vnet(outputs_teacher)
