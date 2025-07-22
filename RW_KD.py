@@ -11,10 +11,10 @@ import torch.optim
 import torchvision.transforms as transforms
 import numpy as np
 
-import teachernet as teachernet
+import model.teachernet as teachernet
 
 from cifar import build_dataset, build_dummy_dataset
-from utils import test, kd_loss_fn, load_teacher, accuracy, adjust_learning_rate
+from helper.utils import test, kd_loss_fn, load_teacher, accuracy, adjust_learning_rate
 # from torch.utils.data import DataLoader
 # from torch.utils.tensorboard import SummaryWriter
 # from torchvision.datasets import MNIST
@@ -41,8 +41,8 @@ parser.add_argument('--print_freq', default=100, type=int)
 parser.add_argument('--seed', type=int, default=1)
 parser.add_argument('--prefetch', type=int, default=0)
 parser.add_argument('--teacher_ckpt', default='teacher_resnet32_cifar10.pt', type=str)
-parser.add_argument('--name_file_log', default='log_loss.json', type=str, help='file to save log')
-parser.add_argument('--log_weight_path', default='log_weight.json', type=str, help='file to save log weight')
+parser.add_argument('--name_file_log', default='log/log_loss.json', type=str, help='file to save log')
+parser.add_argument('--log_weight_path', default='log/log_weight.json', type=str, help='file to save log weight')
 parser.add_argument('--log_weight_freq', default=10, type=int, help='log weight after n epochs')
 parser.add_argument('--l_meta', default='hard', help='mix/only hard/only soft')
 parser.set_defaults(augment=True)
@@ -54,6 +54,11 @@ args.device = device
 
 def main():
     # Set up logging
+    if not os.path.exists('log'):
+        os.makedirs('log')
+    if not os.path.exists('log/args.json'):
+        with open('log/args.json', 'w') as f:
+            json.dump(vars(args), f, indent=4)
     if not os.path.exists(args.name_file_log):
         with open(args.name_file_log, 'w') as f:
             json.dump({}, f, indent=4)

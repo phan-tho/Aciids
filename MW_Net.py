@@ -10,11 +10,11 @@ import torch.optim
 import torchvision.transforms as transforms
 import numpy as np
 
-from resnet import VNet
-import teachernet as teachernet
-import newresnet as newresnet
+from model.resnet import VNet
+import model.teachernet as teachernet
+import model.newresnet as newresnet
 
-from utils import test, kd_loss_fn, load_teacher, accuracy, adjust_learning_rate
+from helper.utils import test, kd_loss_fn, load_teacher, accuracy, adjust_learning_rate
 
 from cifar import build_dataset, build_dummy_dataset
 parser = argparse.ArgumentParser(description='Meta-Weight-Net KD Training')
@@ -31,21 +31,25 @@ parser.add_argument('--temperature', default=4, type=float, help='temperature fo
 parser.add_argument('--normalize_logits', default=False, type=bool, help='normalize logits by std')
 parser.add_argument('--print_freq', default=100, type=int)
 parser.add_argument('--prefetch', type=int, default=0)
-parser.add_argument('--teacher_ckpt', default='teacher_resnet32_cifar10.pt', type=str)
-parser.add_argument('--name_file_log', default='log_loss.json', type=str, help='file to save log')
-parser.add_argument('--log_weight_path', default='log_weight.json', type=str, help='file to save log weight')
+parser.add_argument('--teacher_ckpt', default='teacher_resnet32_cifar10.pth', type=str)
+parser.add_argument('--name_file_log', default='log/log_loss.json', type=str, help='file to save log')
+parser.add_argument('--log_weight_path', default='log/log_weight.json', type=str, help='file to save log weight')
 parser.add_argument('--log_weight_freq', default=10, type=int, help='log weight after n epochs')
 parser.add_argument('--l_meta', default='mix', help='mix/only hard/only soft')
 parser.add_argument('--input_vnet', default='loss', type=str, help='input to vnet (loss/logits_teacher/feature_teacher)')
+parser.add_argument('--debug', default=False, type=bool, help='gen dummy dataset for debug')
 parser.set_defaults(augment=True)
 args = parser.parse_args()
 
 """Save args to a json file"""
-if not os.path.exists('args.json'):
-    with open('args.json', 'w') as f:
+# check if log directory exists, if not create it
+if not os.path.exists('log'):
+    os.makedirs('log')
+if not os.path.exists('log/args.json'):
+    with open('log/args.json', 'w') as f:
         json.dump(vars(args), f, indent=4)
 else:
-    with open('args.json', 'r+') as f:
+    with open('log/args.json', 'r+') as f:
         data = json.load(f)
         data.update(vars(args))
         f.seek(0)
@@ -195,7 +199,10 @@ def main():
             json.dump({}, f, indent=4)
 
     
-    train_loader, valid_loader, test_loader = build_dataset(args=args)
+    if args.debug:
+        train_loader, valid_loader, test_loader = build_dummy_dataset(args=args)
+    else:
+        train_loader, valid_loader, test_loader = build_dataset(args=args)
     model = build_student()
     teacher = load_teacher(args)
     if args.input_vnet == 'loss':

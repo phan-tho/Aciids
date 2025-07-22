@@ -10,7 +10,7 @@ __all__ = ['meta_resnet']
 # --- Start of MetaModule definitions (as provided in your first file) ---
 # This part is copied directly from your initial MetaModule file.
 def to_var(x, requires_grad=None, is_cuda=True):
-    if is_cuda:
+    if is_cuda and torch.cuda.is_available():
         x = x.cuda()
     if requires_grad is not None:
         x.requires_grad_(requires_grad)

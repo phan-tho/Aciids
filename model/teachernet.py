@@ -251,10 +251,21 @@ def gap_loss(y_s, y_t, temp_stu, temp_tea):
 
 if __name__ == '__main__':
     import torch
-    from thop import clever_format, profile
-    model = resnet32()
-    input = torch.randn(1, 3, 32, 32)
-    macs, params = profile(model, inputs=(input, ))
-    macs, params = clever_format([macs, params], "%.3f")
-    print(macs)
-    print(params)
+    # from thop import clever_format, profile
+    # model = resnet32()
+    # input = torch.randn(1, 3, 32, 32)
+    # macs, params = profile(model, inputs=(input, ))
+    # macs, params = clever_format([macs, params], "%.3f")
+    # print(macs)
+    # print(params)
+
+    model = resnet8x4(num_classes=100)
+    input = torch.randn(4, 3, 32, 32)
+
+    with torch.no_grad():
+        out = model(input)
+
+    test =  torch.sum(out.data)
+
+    grad = torch.autograd.grad(test, model.parameters(), retain_graph=True)
+    print(grad)

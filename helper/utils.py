@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import json
 import argparse
-import teachernet
+import model.teachernet as teachernet
 
 
 def test(model, test_loader, epoch, args):

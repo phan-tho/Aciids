@@ -23,8 +23,8 @@ import sklearn.metrics as sm
 import random
 import numpy as np
 
-from wideresnet import WideResNet, VNet
-from resnet import ResNet32,VNet
+from model.wideresnet import WideResNet, VNet
+from model.resnet import ResNet32,VNet
 from cifar import CIFAR10, CIFAR100
 
 parser = argparse.ArgumentParser(description='PyTorch WideResNet Training')
