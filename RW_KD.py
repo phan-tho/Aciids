@@ -56,9 +56,9 @@ def main():
     # Set up logging
     if not os.path.exists('log'):
         os.makedirs('log')
-    if not os.path.exists('log/args.json'):
-        with open('log/args.json', 'w') as f:
-            json.dump(vars(args), f, indent=4)
+    # if not os.path.exists('log/args.json'):
+    #     with open('log/args.json', 'w') as f:
+    #         json.dump(vars(args), f, indent=4)
     if not os.path.exists(args.name_file_log):
         with open(args.name_file_log, 'w') as f:
             json.dump({}, f, indent=4)

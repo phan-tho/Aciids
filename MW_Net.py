@@ -45,16 +45,16 @@ args = parser.parse_args()
 # check if log directory exists, if not create it
 if not os.path.exists('log'):
     os.makedirs('log')
-if not os.path.exists('log/args.json'):
-    with open('log/args.json', 'w') as f:
-        json.dump(vars(args), f, indent=4)
-else:
-    with open('log/args.json', 'r+') as f:
-        data = json.load(f)
-        data.update(vars(args))
-        f.seek(0)
-        json.dump(data, f, indent=4)
-        f.truncate()
+# if not os.path.exists('log/args.json'):
+#     with open('log/args.json', 'w') as f:
+#         json.dump(vars(args), f, indent=4)
+# else:
+#     with open('log/args.json', 'r+') as f:
+#         data = json.load(f)
+#         data.update(vars(args))
+#         f.seek(0)
+#         json.dump(data, f, indent=4)
+#         f.truncate()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 args.device = device
