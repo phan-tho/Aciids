@@ -103,8 +103,9 @@ def normalize_epsilon(epsilon):
     # Normalize epsilon: shape (batch_size, 2)
     for i in range(epsilon.size(0)):
         e = epsilon[i]
-        e[0] = max(e[0], 1e-8) / (max(e[0], 1e-8) + max(e[1], 1e-8))
-        e[1] = max(e[1], 1e-8) / (max(e[0], 1e-8) + max(e[1], 1e-8))
+        sum = max(e[0], 1e-8) + max(e[1], 1e-8)
+        e[0] = max(e[0], 1e-8) / sum
+        e[1] = max(e[1], 1e-8) / sum
     return epsilon
 
 def train(train_loader, valid_loader, model, teacher, model_optimizer, real_model_optimizer, epoch):

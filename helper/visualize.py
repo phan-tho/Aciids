@@ -10,7 +10,10 @@ def read_json(file_path):
 
 def plot_loss(log_loss):
     data = read_json(log_loss)
+    data = {k: v for i, (k, v) in enumerate(data.items()) if i % 16 == 0}
+
     epochs = list(data.keys())
+
     loss_train = [data[epoch]['train']['loss_train'] for epoch in epochs]
     loss_meta = [data[epoch]['train']['loss_meta'] for epoch in epochs]
 
@@ -22,9 +25,13 @@ def plot_loss(log_loss):
     plt.title('Loss Train and Loss Meta Over Epochs')
     plt.xticks(rotation=45)
     plt.legend()
+    plt.show()
 
 def plot_accuracy(log_loss):
     data = read_json(log_loss)
+
+    data = {k: v for i, (k, v) in enumerate(data.items()) if i % 16 == 0}
+
     epochs = list(data.keys())
     acc_train = [data[epoch]['train']['acc_train'] for epoch in epochs]
     acc_meta = [data[epoch]['train']['acc_meta'] for epoch in epochs]
@@ -39,6 +46,7 @@ def plot_accuracy(log_loss):
     plt.title('Accuracy Over Epochs')
     plt.xticks(rotation=45)
     plt.legend()
+    plt.show()
 
 
 def ignore_plot_weights(log_w, epoch):
@@ -48,6 +56,9 @@ def ignore_plot_weights(log_w, epoch):
         print(f"No weights found for epoch {epoch}")
         return
 
+    # sample 20 firest weights
+    if len(weights) > 20:
+        weights = weights[:20]
     n_samples = len(weights)
     w_ce = [weights[i][0] for i in range(n_samples)]
     w_kl = [weights[i][1] for i in range(n_samples)]
@@ -61,6 +72,7 @@ def ignore_plot_weights(log_w, epoch):
     plt.ylim(-0.05, 1.05)
     plt.title(f'Weights for Epoch {epoch}')
     plt.legend()
+    plt.show()
 
 
 def plot_weights(log_w, epoch):
