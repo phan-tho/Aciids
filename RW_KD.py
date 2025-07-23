@@ -56,9 +56,6 @@ def main():
     # Set up logging
     if not os.path.exists('log'):
         os.makedirs('log')
-    # if not os.path.exists('log/args.json'):
-    #     with open('log/args.json', 'w') as f:
-    #         json.dump(vars(args), f, indent=4)
     if not os.path.exists(args.name_file_log):
         with open(args.name_file_log, 'w') as f:
             json.dump({}, f, indent=4)
@@ -103,9 +100,14 @@ def normalize_epsilon(epsilon):
     # Normalize epsilon: shape (batch_size, 2)
     for i in range(epsilon.size(0)):
         e = epsilon[i]
-        sum = max(e[0], 1e-8) + max(e[1], 1e-8)
-        e[0] = max(e[0], 1e-8) / sum
-        e[1] = max(e[1], 1e-8) / sum
+        # origin
+        # sum = max(e[0], 1e-8) + max(e[1], 1e-8)
+        # e[0] = max(e[0], 1e-8) / sum
+        # e[1] = max(e[1], 1e-8) / sum
+
+        sum = torch.exp(e[0]) + torch.exp(e[1]) * 4
+        e[0] = torch.exp(e[0]) / sum
+        e[1] = torch.exp(e[1]) * 4 / sum
     return epsilon
 
 def train(train_loader, valid_loader, model, teacher, model_optimizer, real_model_optimizer, epoch):
@@ -131,7 +133,6 @@ def train(train_loader, valid_loader, model, teacher, model_optimizer, real_mode
         )
 
         # reset meta-parameter weights
-        # model.reset_meta(size=train_x.size(0)).   epsilon = 0
         epsilon = torch.zeros((train_x.size(0), 2), requires_grad=True, device=device)
 
         net_state_dict = torchopt.extract_state_dict(model)

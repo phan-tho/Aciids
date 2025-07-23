@@ -72,11 +72,16 @@ def accuracy(output, target, topk=(1,)):
         res.append(correct_k.mul_(100.0 / batch_size))
     return res
 
-def adjust_learning_rate(optimizer, epoch, args):
+def adjust_learning_rate(optimizer, epoch, args, optimizer_vnet=None):
     # if model is not None. load state dict best currently model at epoch in lr_decay_epoch
     # lr = args.lr * ((0.1 ** int(epoch >= 80)) * (0.1 ** int(epoch >= 100)))
 
     for e in args.lr_decay_epoch:
         if epoch == e:
             for param_group in optimizer.param_groups:
+                param_group['lr'] *= 0.1
+
+    if optimizer_vnet is not None:
+        if epoch == 30 or epoch == 80:
+            for param_group in optimizer_vnet.param_groups:
                 param_group['lr'] *= 0.1

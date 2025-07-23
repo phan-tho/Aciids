@@ -218,7 +218,7 @@ def main():
     best_acc = 0
     at_e = 0
     for epoch in range(args.epochs):
-        adjust_learning_rate(optimizer_model, epoch, args)
+        adjust_learning_rate(optimizer_model, epoch, args, optimizer_vnet)
         train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, optimizer_vnet, epoch)
         test_acc = test(model, test_loader, epoch, args)
 
