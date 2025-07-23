@@ -350,17 +350,25 @@ class TeacherResNet32(nn.Module):
 # meta model to reweight the loss
 
 class VNet(MetaModule):
-    def __init__(self, input, hidden1, output):
+    def __init__(self, input, hidden, output):
         super(VNet, self).__init__()
-        self.linear1 = MetaLinear(input, hidden1)
+        if not isinstance(hidden, list):
+            hidden = [int(hidden)]
+
+        self.deep = len(hidden)
+        hidden.append(output)
+        
+        self.linear1 = MetaLinear(input, hidden[0]) 
         self.relu1 = nn.ReLU(inplace=True)
-        self.linear2 = MetaLinear(hidden1, output)
-        # self.linear3 = MetaLinear(hidden2, output)
+        for i in range(1, self.deep + 1):
+            setattr(self, f'linear{i+1}', MetaLinear(hidden[i-1], hidden[i]))
+            setattr(self, f'relu{i+1}', nn.ReLU(inplace=True))
+
 
     def forward(self, x):
-        x = self.linear1(x)
-        x = self.relu1(x)
-        # x = self.linear2(x)
-        # x = self.relu1(x)
-        out = self.linear2(x)
-        return F.softmax(out, dim=1)
+        for i in range(1, self.deep + 2):
+            x = getattr(self, f'linear{i}')(x)
+            x = getattr(self, f'relu{i}')(x)
+            x = F.dropout(x, p=0.2, training=True)
+
+        return F.softmax(x, dim=1)

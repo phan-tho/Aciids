@@ -208,7 +208,7 @@ def main():
     if args.input_vnet == 'loss':
         vnet = VNet(2, 100, 2).to(device)  # input=2 (hard/soft loss), output=2 (weight cho mỗi loss)
     elif args.input_vnet == 'logits_teacher':
-        vnet = VNet(100, 200, 2).to(device)  # input=100 (features), output=2 (weight cho mỗi loss)
+        vnet = VNet(100, [200, 100], 2).to(device)  # input=100 (features), output=2 (weight cho mỗi loss)
     elif args.input_vnet == 'feature_teacher':
         vnet = VNet(512, 200, 2).to(device)
     optimizer_model = torch.optim.SGD(model.params(), args.lr,
