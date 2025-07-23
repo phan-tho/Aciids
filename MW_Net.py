@@ -59,12 +59,12 @@ if not os.path.exists('log'):
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 args.device = device
 args.seed = 12
+args.n_classes = 10 if args.dataset == 'cifar10' else 100
 torch.manual_seed(args.seed)
 
 
 def build_student():
-    num_classes = 10 if args.dataset == 'cifar10' else 100
-    return newresnet.meta_resnet8x4(num_classes=num_classes).to(device)
+    return newresnet.meta_resnet8x4(num_classes=args.n_classes).to(device)
 
 
 def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, optimizer_vnet, epoch):
@@ -171,7 +171,17 @@ def train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, opt
             
     # end of epoch
     if epoch % args.log_weight_freq == 0:
-        log = {str(epoch + 1): v_lambda.cpu().numpy().tolist()}
+        if args.input_vnet == 'loss':
+            loss_weights = v_lambda.cpu().numpy().tolist()
+            cost_weights = cost.detach().cpu().numpy().tolist()
+            log = {str(epoch + 1): {'v_lambda': loss_weights, 'cost': cost_weights}}
+        elif args.input_vnet == 'logits_teacher':
+            weights = v_lambda.cpu().numpy().tolist()
+            pred_teacher = outputs_teacher.argmax(dim=1).detach().cpu().numpy().tolist()
+            # variance of teacher logits
+            variance_teacher = outputs_teacher.var(dim=1).detach().cpu().numpy().tolist()
+            log = {str(epoch + 1): {'v_lambda': weights, 'pred_teacher': pred_teacher, 'variance_teacher': variance_teacher}}
+
         with open(args.log_weight_path, 'r+') as f:
             data = json.load(f)
             data.update(log)
@@ -208,7 +218,7 @@ def main():
     if args.input_vnet == 'loss':
         vnet = VNet(2, 100, 2).to(device)  # input=2 (hard/soft loss), output=2 (weight cho mỗi loss)
     elif args.input_vnet == 'logits_teacher':
-        vnet = VNet(100, [200, 100], 2).to(device)  # input=100 (features), output=2 (weight cho mỗi loss)
+        vnet = VNet(args.n_classes, [200, 100], 2).to(device)  # input=100 (features), output=2 (weight cho mỗi loss)
     elif args.input_vnet == 'feature_teacher':
         vnet = VNet(512, 200, 2).to(device)
     optimizer_model = torch.optim.SGD(model.params(), args.lr,
