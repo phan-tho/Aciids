@@ -158,7 +158,7 @@ def loss_mode(log_w, epoch):
 def plot_weights(log_w, epoch):
     data = read_json(log_w)
     # if first value of data is dict with keys ('v_lambda), 'pred_teacher', 'variance_teacher'
-    if data[data.keys()[0]].keys() == ['v_lambda', 'pred_teacher', 'variance_teacher']:
+    if list(data[list(data.keys())[0]].keys()) == ['v_lambda', 'pred_teacher', 'variance_teacher']:
         ignore_plot_weights = logits_teacher_mode
     else:
         ignore_plot_weights = loss_mode
