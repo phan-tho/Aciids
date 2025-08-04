@@ -31,17 +31,17 @@ class VNetLearner:
             self.last_epoch = epoch
             if epoch % self.args.log_weight_freq == 0:
                 if self.args.input_vnet == 'loss':
-                    loss_weights = v_lambda.cpu().numpy().tolist()
+                    loss_weights = v_lambda.detach().cpu().numpy().tolist()
                     cost_weights = cost.detach().cpu().numpy().tolist()
                     log = {str(epoch + 1): {'v_lambda': loss_weights, 'cost': cost_weights}}
                 elif self.args.input_vnet == 'logits_teacher':
-                    weights = v_lambda.cpu().numpy().tolist()
+                    weights = v_lambda.detach().cpu().numpy().tolist()
                     pred_teacher = outputs_teacher.argmax(dim=1).detach().cpu().numpy().tolist()
                     # variance of teacher logits
                     variance_teacher = outputs_teacher.var(dim=1).detach().cpu().numpy().tolist()
                     log = {str(epoch + 1): {'v_lambda': weights, 'pred_teacher': pred_teacher, 'variance_teacher': variance_teacher}}
                 elif self.args.input_vnet == 'logit_st':
-                    weights = v_lambda.cpu().numpy().tolist()
+                    weights = v_lambda.detach().cpu().numpy().tolist()
                     log = {str(epoch + 1): {'v_lambda': weights, 'out_student': out_s.detach().cpu().numpy().tolist(), 'out_teacher': out_t.detach().cpu().numpy().tolist()}}
 
                 with open(self.args.log_weight_path, 'r+') as f:
