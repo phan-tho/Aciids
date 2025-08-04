@@ -33,19 +33,39 @@ def test(model, test_loader, epoch, args):
 
     return acc
 
-def kd_loss_fn(student_logits, teacher_logits, target, T, normalize):
-    """Returns hard_loss (CE with gt) and soft_loss (KL with teacher) per sample"""
-    if normalize:
-        # devide logits by stadnard deviation
+def kd_loss_fn(student_logits, teacher_logits, target, args):
+    if args.normalize_logits:
+        # devide logits by standard deviation
         student_logits = student_logits / student_logits.std(dim=1, keepdim=True)
         teacher_logits = teacher_logits / teacher_logits.std(dim=1, keepdim=True)
     hard_loss = F.cross_entropy(student_logits, target, reduction='none')
-    log_student = F.log_softmax(student_logits / T, dim=1)
-    soft_teacher = F.softmax(teacher_logits / T, dim=1)
-    soft_loss = F.kl_div(log_student, soft_teacher, reduction='none').sum(1) * (T*T)
+
+    log_student = F.log_softmax(student_logits / args.temperature, dim=1)
+    soft_teacher = F.softmax(teacher_logits / args.temperature, dim=1)
+    soft_loss = F.kl_div(log_student, soft_teacher, reduction='none').sum(1) * (args.temperature * args.temperature)
+    print(log_student.shape, soft_teacher.shape, soft_loss.shape)
+
+    # adapt commented code above when args.use_wsl is True
+    if args.use_wsl:
+        print('use wsl')
+
+        fc_s_auto = student_logits.detach()
+        fc_t_auto = teacher_logits.detach()
+        log_softmax_s = F.log_softmax(fc_s_auto, dim=1)
+        log_softmax_t = F.log_softmax(fc_t_auto, dim=1)
+
+        one_hot_label = F.one_hot(target, num_classes=100).float()
+        # one_hot_label shape (batch_size, num_classes)
+        softmax_loss_s = - torch.sum(one_hot_label * log_softmax_s, 1, keepdim=True)
+        softmax_loss_t = - torch.sum(one_hot_label * log_softmax_t, 1, keepdim=True)
+
+        focal_weight = softmax_loss_s / (softmax_loss_t + 1e-7)
+        ratio_lower = torch.zeros(1).to(student_logits.device)
+        focal_weight = torch.max(focal_weight, ratio_lower)
+        focal_weight = 1 - torch.exp(- focal_weight)
+        soft_loss = focal_weight.squeeze() * soft_loss
+
     return hard_loss, soft_loss
-
-
 
 
 def load_teacher(args):
@@ -81,7 +101,7 @@ def adjust_learning_rate(optimizer, epoch, args, optimizer_vnet=None):
             for param_group in optimizer.param_groups:
                 param_group['lr'] *= 0.1
 
-    # if optimizer_vnet is not None:
-    #     if epoch == 30 or epoch == 80:
-    #         for param_group in optimizer_vnet.param_groups:
-    #             param_group['lr'] *= 0.1
+    if optimizer_vnet is not None:
+        if epoch in [30, 80, 120, 175]:
+            for param_group in optimizer_vnet.param_groups:
+                param_group['lr'] *= 0.1
