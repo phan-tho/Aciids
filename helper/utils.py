@@ -43,12 +43,9 @@ def kd_loss_fn(student_logits, teacher_logits, target, args):
     log_student = F.log_softmax(student_logits / args.temperature, dim=1)
     soft_teacher = F.softmax(teacher_logits / args.temperature, dim=1)
     soft_loss = F.kl_div(log_student, soft_teacher, reduction='none').sum(1) * (args.temperature * args.temperature)
-    print(log_student.shape, soft_teacher.shape, soft_loss.shape)
 
     # adapt commented code above when args.use_wsl is True
     if args.use_wsl:
-        print('use wsl')
-
         fc_s_auto = student_logits.detach()
         fc_t_auto = teacher_logits.detach()
         log_softmax_s = F.log_softmax(fc_s_auto, dim=1)
