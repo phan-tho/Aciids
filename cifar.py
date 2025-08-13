@@ -7,6 +7,8 @@ import torch
 import torchvision.transforms as transforms
 import torch.utils.data as data
 from torchvision.datasets.utils import download_url, check_integrity
+from torch.utils.data import Subset
+
 
 class CIFAR10(data.Dataset):
     base_folder = 'cifar-10-batches-py'
@@ -193,9 +195,20 @@ def build_dummy_dataset(args):
     train_data = torch.randn(16, 3, 32, 32)
     train_labels = torch.randint(0, num_classes, (16,))
 
-    train_loader = torch.utils.data.DataLoader(list(zip(train_data, train_labels)), batch_size=4)
-    valid_loader = torch.utils.data.DataLoader(list(zip(train_data, train_labels)), batch_size=4)
-    test_loader = torch.utils.data.DataLoader(list(zip(train_data, train_labels)), batch_size=4)
+    train_data = list(zip(train_data, train_labels))
+
+    if args.n_omits > 0:
+        train_data = omit_last_classes(train_data, args.n_omits)
+    if args.imb_factor > 1:
+        train_data = make_imbalanced_dataset(train_data, args)
+
+    all_label = np.array([label for (_, label) in train_data])
+    cnt_cls = np.array([sum(all_label == i) for i in range(args.n_classes)])
+    print("Class distribution:", cnt_cls)
+
+    train_loader = torch.utils.data.DataLoader(train_data, batch_size=4)
+    valid_loader = torch.utils.data.DataLoader(train_data, batch_size=4)
+    test_loader = torch.utils.data.DataLoader(train_data, batch_size=4)
 
     return train_loader, valid_loader, test_loader
 
@@ -225,6 +238,11 @@ def build_dataset(args):
             root='../data', train=True, valid=True, num_valid=args.num_valid, transform=train_transform, download=True, seed=args.seed)
         test_data = CIFAR100(root='../data', train=False, transform=test_transform, download=True)
 
+    if args.n_omits > 0:
+        train_data = omit_last_classes(train_data, args.n_omits)
+    if args.imb_factor > 1:
+        train_data = make_imbalanced_dataset(train_data, args)
+
     train_loader = torch.utils.data.DataLoader(
         train_data, batch_size=args.batch_size, shuffle=True,
         num_workers=args.prefetch, pin_memory=True)
@@ -234,3 +252,34 @@ def build_dataset(args):
     test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.batch_size, shuffle=False,
                                               num_workers=args.prefetch, pin_memory=True)
     return train_loader, valid_loader, test_loader
+
+
+def make_imbalanced_dataset(dataset, args):
+    rng = np.random.default_rng(args.seed)
+    targets = np.array([label for (_, label) in dataset])
+    cnt_cls = np.array([sum(targets == i) for i in range(args.n_classes)])
+    img_max = min(cnt_cls)
+
+    imb_factor = 1/args.imb_factor
+
+    img_num_per_cls = []
+    for cls_idx in range(args.n_classes):
+        num = img_max * (imb_factor**(cls_idx / (args.n_classes - 1.0)))
+        img_num_per_cls.append(int(num))
+
+    indices_list = []
+    for cls_idx, num_samples in enumerate(img_num_per_cls):
+        cls_indices = np.where(targets == cls_idx)[0]
+        sampled_indices = rng.choice(cls_indices, size=num_samples, replace=False)
+        indices_list.append(sampled_indices)
+
+    all_indices = np.concatenate(indices_list)
+    return Subset(dataset, all_indices)
+
+def omit_last_classes(dataset, n_omits):
+    targets = np.array([label for (_, label) in dataset])
+    max_class = max(targets) + 1
+    keep_classes = set(range(max_class - n_omits))
+
+    keep_indices = [i for i, t in enumerate(targets) if t in keep_classes]
+    return Subset(dataset, keep_indices)

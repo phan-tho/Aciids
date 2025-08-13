@@ -36,13 +36,18 @@ parser.add_argument('--teacher_ckpt', default='teacher_resnet32_cifar10.pth', ty
 parser.add_argument('--name_file_log', default='log/log_loss.json', type=str, help='file to save log')
 parser.add_argument('--log_weight_path', default='log/log_weight.json', type=str, help='file to save log weight')
 parser.add_argument('--log_weight_freq', default=10, type=int, help='log weight after n epochs')
-parser.add_argument('--l_meta', default='mix', help='mix/only hard/only soft')
+parser.add_argument('--l_meta', default='hard', help='mix/hard/soft')
 parser.add_argument('--input_vnet', default='loss', type=str, help='input to vnet (loss/logits_teacher/logit_st)')
 parser.add_argument('--debug', default=False, type=bool, help='gen dummy dataset for debug')
+
+parser.add_argument('--imb_factor', default=1, type=float, help='imbalance factor, larger means more imbalance')
+parser.add_argument('--n_omits', default=0, type=int, help='number of classes to omit')
 
 parser.add_argument('--use_wsl', default=False, type=bool, help='use wsl loss')
 parser.set_defaults(augment=True)
 args = parser.parse_args()
+
+# test: python MW_Net.py --debug True --dataset cifar10 
 
 """Save args to a json file"""
 if not os.path.exists('log'):
@@ -67,6 +72,8 @@ def train(train_loader, valid_loader, model, teacher, vnet_learner, optimizer_mo
 
     total_prec_train = 0
     total_prec_meta = 0
+
+    n_batches = 0
 
     for batch_idx, (inputs, targets) in enumerate(train_loader):
         model.train()
@@ -145,8 +152,10 @@ def train(train_loader, valid_loader, model, teacher, vnet_learner, optimizer_mo
                   'Prec_meta@1 %.2f' % (
                       (epoch + 1), args.epochs, batch_idx + 1, len(train_loader.dataset)/args.batch_size,
                       train_loss / (batch_idx + 1), meta_loss / (batch_idx + 1), prec_train, prec_meta))
+            
+        n_batches = batch_idx + 1
 
-    log = {'train': {'loss_train': float(train_loss / (batch_idx + 1)), 'acc_train': float(total_prec_train / (batch_idx + 1)), 'loss_meta': float(meta_loss / (batch_idx + 1)), 'acc_meta': float(total_prec_meta / (batch_idx + 1))}}
+    log = {'train': {'loss_train': float(train_loss / n_batches), 'acc_train': float(total_prec_train / n_batches), 'loss_meta': float(meta_loss / n_batches), 'acc_meta': float(total_prec_meta / n_batches)}}
     # save log to json file
     with open(args.name_file_log, 'r+') as f:
         data = json.load(f)
@@ -167,6 +176,7 @@ def main():
 
     
     if args.debug:
+        print("Debug mode: using dummy dataset")
         train_loader, valid_loader, test_loader = build_dummy_dataset(args=args)
     else:
         train_loader, valid_loader, test_loader = build_dataset(args=args)
