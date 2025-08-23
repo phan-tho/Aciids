@@ -184,7 +184,7 @@ def main():
     teacher = load_teacher(args)
 
     if args.input_vnet == 'loss' or args.input_vnet == 'logit_st':
-        vnet = VNet(2, 100, 2).to(device)  # input=2 (hard/soft loss), output=2 (weight cho mỗi loss)
+        vnet = VNet(2, [100, 100], 2).to(device)  # input=2 (hard/soft loss), output=2 (weight cho mỗi loss)
     elif args.input_vnet == 'logits_teacher':
         vnet = VNet(args.n_classes, [200, 100], 2).to(device)  # input=100 (features), output=2 (weight cho mỗi loss)
     elif args.input_vnet == 'feature_teacher':
