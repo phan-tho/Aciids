@@ -351,6 +351,7 @@ class TeacherResNet32(nn.Module):
 
 class VNet(MetaModule):
     def __init__(self, input, hidden, output):
+        # hidden is an array of hidden layer sizes
         super(VNet, self).__init__()
         if not isinstance(hidden, list):
             hidden = [int(hidden)]
@@ -366,9 +367,12 @@ class VNet(MetaModule):
 
 
     def forward(self, x):
+        # torch.stack([hard_loss, soft_loss], dim=1) 
         for i in range(1, self.deep + 2):
             x = getattr(self, f'linear{i}')(x)
             x = getattr(self, f'relu{i}')(x)
             x = F.dropout(x, p=0.2, training=True)
 
-        return F.softmax(x, dim=1)
+        # x: shape (batch, 2)
+        # return F.softmax(x, dim=1)
+        return F.softmax(x, dim=1) * F.softmax(x.sum(dim=1, keepdim=True), dim=0) * x.shape[0]
