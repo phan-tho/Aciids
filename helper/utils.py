@@ -98,7 +98,7 @@ def adjust_learning_rate(optimizer, epoch, args, optimizer_vnet=None):
             for param_group in optimizer.param_groups:
                 param_group['lr'] *= 0.1
 
-    if optimizer_vnet is not None:
+    if optimizer_vnet is not None and args.scheduler_vnet == False:
         if epoch == 200:
             for param_group in optimizer_vnet.param_groups:
                 param_group['lr'] *= 0.1

@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 import torchvision.transforms as transforms
 import numpy as np
 
@@ -44,6 +45,7 @@ parser.add_argument('--imb_factor', default=1, type=float, help='imbalance facto
 parser.add_argument('--n_omits', default=0, type=int, help='number of classes to omit')
 
 parser.add_argument('--use_wsl', default=False, type=bool, help='use wsl loss')
+parser.add_argument('--scheduler_vnet', default=False, type=bool, help='use scheduler for vnet optimizer')
 parser.set_defaults(augment=True)
 args = parser.parse_args()
 
@@ -64,7 +66,7 @@ def build_student():
     return newresnet.meta_resnet8x4(num_classes=args.n_classes).to(device)
 
 
-def train(train_loader, valid_loader, model, teacher, vnet_learner, optimizer_model, epoch):
+def train(train_loader, valid_loader, model, teacher, vnet_learner, optimizer_model, scheduler_vnet, epoch):
     print('\nEpoch: %d' % epoch)
     train_loss = 0
     meta_loss = 0
@@ -155,6 +157,9 @@ def train(train_loader, valid_loader, model, teacher, vnet_learner, optimizer_mo
             
         n_batches = batch_idx + 1
 
+    if args.scheduler_vnet:
+        scheduler_vnet.step(meta_loss / n_batches)
+
     log = {'train': {'loss_train': float(train_loss / n_batches), 'acc_train': float(total_prec_train / n_batches), 'loss_meta': float(meta_loss / n_batches), 'acc_meta': float(total_prec_meta / n_batches)}}
     # save log to json file
     with open(args.name_file_log, 'r+') as f:
@@ -194,6 +199,7 @@ def main():
     optimizer_model = torch.optim.SGD(model.params(), args.lr,
                                       momentum=args.momentum, weight_decay=args.weight_decay)
     optimizer_vnet = torch.optim.Adam(vnet.params(), 1e-3, weight_decay=1e-4)
+    scheduler_vnet = ReduceLROnPlateau(optimizer_vnet, factor=0.5, patience=15)
 
     vnet_learner = VNetLearner(vnet, optimizer_vnet, args)
 
@@ -201,8 +207,7 @@ def main():
     at_e = 0
     for epoch in range(args.epochs):
         adjust_learning_rate(optimizer_model, epoch, args, optimizer_vnet)
-        # train(train_loader, valid_loader, model, teacher, vnet, optimizer_model, optimizer_vnet, epoch)
-        train(train_loader, valid_loader, model, teacher, vnet_learner, optimizer_model, epoch)
+        train(train_loader, valid_loader, model, teacher, vnet_learner, optimizer_model, scheduler_vnet, epoch)
         test_acc = test(model, test_loader, epoch, args)
 
         if test_acc >= best_acc:
