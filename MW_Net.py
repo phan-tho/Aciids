@@ -96,7 +96,8 @@ def train(train_loader, valid_loader, model, teacher, vnet_learner, optimizer_mo
 
         w_hard = v_lambda[:, 0:1] # shape (batch_size, 1)
         w_soft = v_lambda[:, 1:2] # shape (batch_size, 1)
-        l_f_meta = torch.sum(w_hard * hard_loss.unsqueeze(1) + w_soft * soft_loss.unsqueeze(1)) / w_hard.size(0)
+        l_f_meta = torch.sum(w_hard * hard_loss.unsqueeze(1) + w_soft * soft_loss.unsqueeze(1)) # / w_hard.size(0)
+
         meta_model.zero_grad()
         grads = torch.autograd.grad(l_f_meta, (meta_model.params()), create_graph=True)
         meta_model.update_params(lr_inner=args.lr, source_params=grads)
@@ -131,7 +132,7 @@ def train(train_loader, valid_loader, model, teacher, vnet_learner, optimizer_mo
 
         w_hard = v_lambda[:, 0:1]
         w_soft = v_lambda[:, 1:2]
-        loss = torch.sum(w_hard * hard_loss.unsqueeze(1) + w_soft * soft_loss.unsqueeze(1)) / w_hard.size(0)
+        loss = torch.sum(w_hard * hard_loss.unsqueeze(1) + w_soft * soft_loss.unsqueeze(1)) # / w_hard.size(0)
 
         optimizer_model.zero_grad()
         loss.backward()
