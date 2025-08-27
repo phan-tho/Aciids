@@ -38,13 +38,12 @@ parser.add_argument('--name_file_log', default='log/log_loss.json', type=str, he
 parser.add_argument('--log_weight_path', default='log/log_weight.json', type=str, help='file to save log weight')
 parser.add_argument('--log_weight_freq', default=10, type=int, help='log weight after n epochs')
 parser.add_argument('--l_meta', default='hard', help='mix/hard/soft')
-parser.add_argument('--input_vnet', default='loss', type=str, help='input to vnet (loss/logits_teacher/logit_st)')
+parser.add_argument('--input_vnet', default='loss', type=str, help='input to vnet (loss/logits_teacher/logit_st/loss_ce)')
 parser.add_argument('--debug', default=False, type=bool, help='gen dummy dataset for debug')
 
 parser.add_argument('--imb_factor', default=1, type=float, help='imbalance factor, larger means more imbalance')
 parser.add_argument('--n_omits', default=0, type=int, help='number of classes to omit')
 
-parser.add_argument('--use_wsl', default=False, type=bool, help='use wsl loss')
 parser.add_argument('--scheduler_vnet', default=False, type=bool, help='use scheduler for vnet optimizer')
 parser.add_argument('--hidden_vnet', default=[100], nargs='+', type=int,
                     help='hidden layers for vnet')
@@ -191,7 +190,7 @@ def main():
     model = build_student()
     teacher = load_teacher(args)
 
-    if args.input_vnet == 'loss' or args.input_vnet == 'logit_st':
+    if args.input_vnet == 'loss' or args.input_vnet == 'logit_st' or args.input_vnet == 'loss_ce':
         # vnet = VNet(2, [200, 100], 2).to(device)  # input=2 (hard/soft loss), output=2 (weight cho mỗi loss)
         vnet = VNet(2, args.hidden_vnet, 2).to(device)
     elif args.input_vnet == 'logits_teacher':
