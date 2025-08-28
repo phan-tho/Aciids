@@ -31,7 +31,7 @@ parser.add_argument('--lr_decay_epoch', default=[5, 80, 120, 175], nargs='+', ty
                     help='epochs to decay learning rate')
 parser.add_argument('--temperature', default=4, type=float, help='temperature for softmax')
 parser.add_argument('--normalize_logits', default=False, type=bool, help='normalize logits by std')
-parser.add_argument('--print_freq', default=100, type=int)
+parser.add_argument('--print_freq', default=150, type=int)
 parser.add_argument('--prefetch', type=int, default=0)
 parser.add_argument('--teacher_ckpt', default='teacher_resnet32_cifar10.pth', type=str)
 parser.add_argument('--name_file_log', default='log/log_loss.json', type=str, help='file to save log')
@@ -95,7 +95,7 @@ def train(train_loader, valid_loader, model, teacher, vnet_learner, optimizer_mo
 
         w_hard = v_lambda[:, 0:1] # shape (batch_size, 1)
         w_soft = v_lambda[:, 1:2] # shape (batch_size, 1)
-        l_f_meta = torch.sum(w_hard * hard_loss.unsqueeze(1) + w_soft * soft_loss.unsqueeze(1)) # / w_hard.size(0)
+        l_f_meta = torch.sum(w_hard * hard_loss.unsqueeze(1) + w_soft * soft_loss.unsqueeze(1)) / w_hard.size(0)
 
         meta_model.zero_grad()
         grads = torch.autograd.grad(l_f_meta, (meta_model.params()), create_graph=True)
@@ -131,7 +131,7 @@ def train(train_loader, valid_loader, model, teacher, vnet_learner, optimizer_mo
 
         w_hard = v_lambda[:, 0:1]
         w_soft = v_lambda[:, 1:2]
-        loss = torch.sum(w_hard * hard_loss.unsqueeze(1) + w_soft * soft_loss.unsqueeze(1)) # / w_hard.size(0)
+        loss = torch.sum(w_hard * hard_loss.unsqueeze(1) + w_soft * soft_loss.unsqueeze(1)) / w_hard.size(0)
 
         optimizer_model.zero_grad()
         loss.backward()
@@ -202,7 +202,7 @@ def main():
     optimizer_model = torch.optim.SGD(model.params(), args.lr,
                                       momentum=args.momentum, weight_decay=args.weight_decay)
     optimizer_vnet = torch.optim.Adam(vnet.params(), 1e-3, weight_decay=1e-4)
-    scheduler_vnet = ReduceLROnPlateau(optimizer_vnet, factor=0.5, patience=15)
+    scheduler_vnet = ReduceLROnPlateau(optimizer_vnet, factor=0.5, patience=50)
 
     vnet_learner = VNetLearner(vnet, optimizer_vnet, args)
 
