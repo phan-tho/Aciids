@@ -19,6 +19,10 @@ class VNetLearner:
         elif self.args.input_vnet == 'logits_teacher':
             v_lambda = self.vnet(outputs_teacher.data)
         elif self.args.input_vnet == 'logit_st':
+            if self.args.normalize_logits:
+                # devide logits by standard deviation
+                outputs_student = outputs_student / outputs_student.std(dim=1, keepdim=True)
+                outputs_teacher = outputs_teacher / outputs_teacher.std(dim=1, keepdim=True)
             out_s = outputs_student[torch.arange(outputs_student.size(0)), targets]
             out_t = outputs_teacher[torch.arange(outputs_teacher.size(0)), targets]
             out = torch.stack([out_s, out_t], dim=1) # shape [batch, 2]

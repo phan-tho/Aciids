@@ -220,7 +220,8 @@ def main():
                 'student': model.state_dict(),
                 'vnet': vnet.state_dict(),
                 'acc@1': best_acc,
-                'epoch': epoch + 1
+                'epoch': epoch + 1,
+                'config': vars(args)
             }
             torch.save(ckpt, f'8x4_{args.dataset}.pth')
         
