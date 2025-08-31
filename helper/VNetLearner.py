@@ -19,7 +19,7 @@ class VNetLearner:
         elif self.args.input_vnet == 'logits_teacher':
             v_lambda = self.vnet(outputs_teacher.data)
         elif self.args.input_vnet == 'logit_st':
-            if self.args.normalize_logits:
+            if self.args.norm_bf_feed_vnet:
                 # devide logits by standard deviation
                 outputs_student = outputs_student / outputs_student.std(dim=1, keepdim=True)
                 outputs_teacher = outputs_teacher / outputs_teacher.std(dim=1, keepdim=True)

@@ -39,6 +39,7 @@ parser.add_argument('--log_weight_path', default='log/log_weight.json', type=str
 parser.add_argument('--log_weight_freq', default=10, type=int, help='log weight after n epochs')
 parser.add_argument('--l_meta', default='hard', help='mix/hard/soft')
 parser.add_argument('--input_vnet', default='loss', type=str, help='input to vnet (loss/logits_teacher/logit_st/loss_ce)')
+parser.add_argument('--norm_bf_feed_vnet', default=False, type=bool, help='normalize before feeding to vnet')
 parser.add_argument('--debug', default=False, type=bool, help='gen dummy dataset for debug')
 
 parser.add_argument('--imb_factor', default=1, type=float, help='imbalance factor, larger means more imbalance')
