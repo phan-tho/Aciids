@@ -38,7 +38,7 @@ parser.add_argument('--name_file_log', default='log/log_loss.json', type=str, he
 parser.add_argument('--log_weight_path', default='log/log_weight.json', type=str, help='file to save log weight')
 parser.add_argument('--log_weight_freq', default=10, type=int, help='log weight after n epochs')
 parser.add_argument('--l_meta', default='hard', help='mix/hard/soft')
-parser.add_argument('--input_vnet', default='loss', type=str, help='input to vnet (loss/logits_teacher/logit_st/loss_ce)')
+parser.add_argument('--input_vnet', default='loss', type=str, help='input to vnet (loss/logits_teacher/logit_st/loss_ce/ce_student)')
 parser.add_argument('--norm_bf_feed_vnet', default=False, type=bool, help='normalize before feeding to vnet')
 parser.add_argument('--debug', default=False, type=bool, help='gen dummy dataset for debug')
 
@@ -199,6 +199,8 @@ def main():
         vnet = VNet(args.n_classes, args.hidden_vnet, 2).to(device)
     elif args.input_vnet == 'feature_teacher':
         vnet = VNet(512, args.hidden_vnet, 2).to(device)
+    elif args.input_vnet == 'ce_student':
+        vnet = VNet(1, args.hidden_vnet, 2).to(device)
 
     optimizer_model = torch.optim.SGD(model.params(), args.lr,
                                       momentum=args.momentum, weight_decay=args.weight_decay)

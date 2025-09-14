@@ -31,6 +31,8 @@ class VNetLearner:
             ce_teacher = torch.functional.F.cross_entropy(outputs_teacher, targets, reduction='none') # shape [batch]
             ce = torch.stack([hard_loss, ce_teacher], dim=1) # shape [batch, 2]
             v_lambda = self.vnet(ce.data)
+        elif self.args.input_vnet == 'ce_student':
+            v_lambda = self.vnet(hard_loss.data)
 
         if no_grad:
             v_lambda = v_lambda.detach()
@@ -54,7 +56,9 @@ class VNetLearner:
                 elif self.args.input_vnet == 'loss_ce':
                     weights = v_lambda.detach().cpu().numpy().tolist()
                     log = {str(epoch + 1): {'v_lambda': weights, 'ce_teacher': ce_teacher.detach().cpu().numpy().tolist(), 'ce_student': hard_loss.detach().cpu().numpy().tolist()}}
-
+                elif self.args.input_vnet == 'ce_student':
+                    weights = v_lambda.detach().cpu().numpy().tolist()
+                    log = {str(epoch + 1): {'v_lambda': weights, 'ce_student': hard_loss.detach().cpu().numpy().tolist()}}
                 with open(self.args.log_weight_path, 'r+') as f:
                     data = json.load(f)
                     data.update(log)

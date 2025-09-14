@@ -375,7 +375,6 @@ class VNet(MetaModule):
 
         # x: shape (batch, 2)
         # return F.softmax(x, dim=1)
-        # return F.softmax(x, dim=1) * F.softmax(x.sum(dim=1, keepdim=True), dim=0) * x.shape[0]
 
         # return F.softmax(x, dim=1) * F.sigmoid(x.sum(dim=1, keepdim=True))
 
