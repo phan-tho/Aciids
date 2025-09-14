@@ -32,7 +32,7 @@ class VNetLearner:
             ce = torch.stack([hard_loss, ce_teacher], dim=1) # shape [batch, 2]
             v_lambda = self.vnet(ce.data)
         elif self.args.input_vnet == 'ce_student':
-            v_lambda = self.vnet(hard_loss.data)
+            v_lambda = self.vnet(hard_loss.unsqueeze(1).data)
 
         if no_grad:
             v_lambda = v_lambda.detach()
