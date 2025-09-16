@@ -376,9 +376,9 @@ class VNet(MetaModule):
         # x: shape (batch, 2)
         # return F.softmax(x, dim=1)
 
-        # return F.softmax(x, dim=1) * F.sigmoid(x.sum(dim=1, keepdim=True))
+        return F.softmax(x, dim=1) * F.sigmoid(x.sum(dim=1, keepdim=True))
 
-        w = torch.ones_like(x, requires_grad=False)
-        w[:, 0] = w[:, 0] * 0.2
-        w[:, 1] = w[:, 1] * 0.8
-        return w * F.sigmoid(x.sum(dim=1, keepdim=True))
+        # w = torch.ones_like(x, requires_grad=False)
+        # w[:, 0] = w[:, 0] * 0.2
+        # w[:, 1] = w[:, 1] * 0.8
+        # return w * F.sigmoid(x.sum(dim=1, keepdim=True))
