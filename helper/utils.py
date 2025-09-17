@@ -44,6 +44,7 @@ def kd_loss_fn(student_logits, teacher_logits, target, args):
     soft_teacher = F.softmax(teacher_logits / args.temperature, dim=1)
     soft_loss = F.kl_div(log_student, soft_teacher, reduction='none').sum(1) * (args.temperature * args.temperature)
 
+    # hard_loss shape: [batch_size]
     return hard_loss, soft_loss
 
 
@@ -79,8 +80,10 @@ def adjust_learning_rate(optimizer, epoch, args, optimizer_vnet=None):
         if epoch == e:
             for param_group in optimizer.param_groups:
                 param_group['lr'] *= 0.1
-
-    if optimizer_vnet is not None and args.scheduler_vnet == False:
-        if epoch == 200:
             for param_group in optimizer_vnet.param_groups:
-                param_group['lr'] *= 0.1
+                param_group['lr'] *= 0.8
+
+    # if optimizer_vnet is not None and args.scheduler_vnet == False:
+    #     if epoch == 200:
+    #         for param_group in optimizer_vnet.param_groups:
+    #             param_group['lr'] *= 0.1

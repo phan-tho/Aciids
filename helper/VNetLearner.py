@@ -33,6 +33,10 @@ class VNetLearner:
             v_lambda = self.vnet(ce.data)
         elif self.args.input_vnet == 'ce_student':
             v_lambda = self.vnet(hard_loss.unsqueeze(1).data)
+        elif self.args.input_vnet == 'ce_s+tgt_logit_t':
+            out_t = outputs_teacher[torch.arange(outputs_teacher.size(0)), targets]
+            out = torch.stack([hard_loss, out_t], dim=1) # shape [batch, 2]
+            v_lambda = self.vnet(out.data)
 
         if no_grad:
             v_lambda = v_lambda.detach()
@@ -59,6 +63,9 @@ class VNetLearner:
                 elif self.args.input_vnet == 'ce_student':
                     weights = v_lambda.detach().cpu().numpy().tolist()
                     log = {str(epoch + 1): {'v_lambda': weights, 'ce_student': hard_loss.detach().cpu().numpy().tolist()}}
+                elif self.args.input_vnet == 'ce_s+tgt_logit_t':
+                    weights = v_lambda.detach().cpu().numpy().tolist()
+                    log = {str(epoch + 1): {'v_lambda': weights, 'ce_student': hard_loss.detach().cpu().numpy().tolist(), 'tgt_logit_teacher': out_t.detach().cpu().numpy().tolist()}}
                 with open(self.args.log_weight_path, 'r+') as f:
                     data = json.load(f)
                     data.update(log)
