@@ -38,7 +38,7 @@ parser.add_argument('--name_file_log', default='log/log_loss.json', type=str, he
 parser.add_argument('--log_weight_path', default='log/log_weight.json', type=str, help='file to save log weight')
 parser.add_argument('--log_weight_freq', default=10, type=int, help='log weight after n epochs')
 parser.add_argument('--l_meta', default='hard', help='mix/hard/soft')
-parser.add_argument('--input_vnet', default='loss', type=str, help='input to vnet (loss/logits_teacher/logit_st/loss_ce/ce_student/ce_s+tgt_logit_t)')
+parser.add_argument('--input_vnet', default='loss', type=str, help='input to vnet (loss/logits_teacher/logit_st/loss_ce/ce_student/ce_s+tgt_logit_t/logit_st+ce_student)')
 parser.add_argument('--norm_bf_feed_vnet', default=False, type=bool, help='normalize before feeding to vnet')
 parser.add_argument('--debug', default=False, type=bool, help='gen dummy dataset for debug')
 
@@ -198,6 +198,8 @@ def main():
         vnet = VNet(512, args.hidden_vnet, 2).to(device)
     elif args.input_vnet == 'ce_student':
         vnet = VNet(1, args.hidden_vnet, 2).to(device)
+    elif args.input_vnet == 'logit_st+ce_student':
+        vnet = VNet(3, args.hidden_vnet, 2).to(device)
     else:
         vnet = VNet(2, args.hidden_vnet, 2).to(device)
         # if args.input_vnet == 'loss' or args.input_vnet == 'logit_st' or args.input_vnet == 'loss_ce':

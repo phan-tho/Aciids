@@ -37,6 +37,15 @@ class VNetLearner:
             out_t = outputs_teacher[torch.arange(outputs_teacher.size(0)), targets]
             out = torch.stack([hard_loss, out_t], dim=1) # shape [batch, 2]
             v_lambda = self.vnet(out.data)
+        elif self.args.input_vnet == 'logit_st+ce_student':
+            if self.args.norm_bf_feed_vnet:
+                # devide logits by standard deviation
+                outputs_student = outputs_student / outputs_student.std(dim=1, keepdim=True)
+                outputs_teacher = outputs_teacher / outputs_teacher.std(dim=1, keepdim=True)
+            out_s = outputs_student[torch.arange(outputs_student.size(0)), targets]
+            out_t = outputs_teacher[torch.arange(outputs_teacher.size(0)), targets]
+            out = torch.stack([out_s, out_t, hard_loss], dim=1) # shape [batch, 3]
+            v_lambda = self.vnet(out.data)
 
         if no_grad:
             v_lambda = v_lambda.detach()
@@ -66,6 +75,9 @@ class VNetLearner:
                 elif self.args.input_vnet == 'ce_s+tgt_logit_t':
                     weights = v_lambda.detach().cpu().numpy().tolist()
                     log = {str(epoch + 1): {'v_lambda': weights, 'ce_student': hard_loss.detach().cpu().numpy().tolist(), 'tgt_logit_teacher': out_t.detach().cpu().numpy().tolist()}}
+                elif self.args.input_vnet == 'logit_st+ce_student':
+                    weights = v_lambda.detach().cpu().numpy().tolist()
+                    log = {str(epoch + 1): {'v_lambda': weights, 'out_student': out_s.detach().cpu().numpy().tolist(), 'out_teacher': out_t.detach().cpu().numpy().tolist(), 'ce_student': hard_loss.detach().cpu().numpy().tolist()}}
                 with open(self.args.log_weight_path, 'r+') as f:
                     data = json.load(f)
                     data.update(log)
