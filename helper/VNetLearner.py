@@ -28,6 +28,8 @@ class VNetLearner:
             out = torch.stack([out_s, out_t], dim=1) # shape [batch, 2]
             v_lambda = self.vnet(out.data)
         elif self.args.input_vnet == 'loss_ce':
+            if self.args.normalize_logits:
+                outputs_teacher = outputs_teacher / outputs_teacher.std(dim=1, keepdim=True)
             ce_teacher = torch.functional.F.cross_entropy(outputs_teacher, targets, reduction='none') # shape [batch]
             ce = torch.stack([hard_loss, ce_teacher], dim=1) # shape [batch, 2]
             v_lambda = self.vnet(ce.data)
