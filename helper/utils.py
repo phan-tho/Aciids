@@ -78,6 +78,7 @@ def adjust_learning_rate(optimizer, epoch, args, optimizer_vnet=None):
 
     for e in args.lr_decay_epoch:
         if epoch == e:
+            args.lr *= 0.1
             for param_group in optimizer.param_groups:
                 param_group['lr'] *= 0.1
             for param_group in optimizer_vnet.param_groups:
