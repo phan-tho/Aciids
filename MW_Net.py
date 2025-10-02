@@ -15,7 +15,7 @@ from model.resnet import VNet
 import model.teachernet as teachernet
 import model.newresnet as newresnet
 
-from helper.utils import test, kd_loss_fn, load_teacher, accuracy, adjust_learning_rate
+from helper.utils import test, train, kd_loss_fn, load_teacher, accuracy, adjust_learning_rate
 from helper.VNetLearner import VNetLearner
 
 from cifar import build_dataset, build_dummy_dataset
@@ -63,116 +63,29 @@ args.seed = 12
 args.n_classes = 10 if args.dataset == 'cifar10' else 100
 torch.manual_seed(args.seed)
 
-with open('log/args.json', 'w') as f:
-    json.dump(vars(args), f, indent=4)
+if not os.path.exists('log/args.txt'):
+    with open('log/args.txt', 'w') as f:
+        for arg in vars(args):
+            f.write(f'{arg} = {getattr(args, arg)}\n')
 
 def build_student():
     return newresnet.meta_resnet8x4(num_classes=args.n_classes).to(device)
 
-
-def train(train_loader, valid_loader, model, teacher, vnet_learner, optimizer_model, scheduler_vnet, epoch):
-    print('\nEpoch: %d' % epoch)
-    train_loss = 0
-    meta_loss = 0
-    valid_loader_iter = iter(valid_loader)
-
-    total_prec_train = 0
-    total_prec_meta = 0
-
-    n_batches = 0
-
-    for batch_idx, (inputs, targets) in enumerate(train_loader):
-        model.train()
-        inputs, targets = inputs.to(device), targets.to(device)
-        with torch.no_grad():
-            outputs_teacher = teacher(inputs)
-
-        # Step 1: Meta-model (for meta-update) 
-        meta_model = build_student()
-        meta_model.load_state_dict(model.state_dict())
-        meta_model.to(device)
-
-        outputs_student = meta_model(inputs)
-
-        v_lambda, hard_loss, soft_loss = vnet_learner(outputs_student, outputs_teacher, targets, epoch)
-
-        w_hard = v_lambda[:, 0:1] # shape (batch_size, 1)
-        w_soft = v_lambda[:, 1:2] # shape (batch_size, 1)
-        l_f_meta = torch.sum(w_hard * hard_loss.unsqueeze(1) + w_soft * soft_loss.unsqueeze(1)) / w_hard.size(0)
-
-        meta_model.zero_grad()
-        grads = torch.autograd.grad(l_f_meta, (meta_model.params()), create_graph=True)
-        meta_model.update_params(lr_inner=args.lr, source_params=grads)
-        del grads
-
-        try:
-            inputs_val, targets_val = next(valid_loader_iter)
-            # shape inputs_val: (batch_size, 3, 32, 32), targets_val: (batch_size)
-        except StopIteration:
-            valid_loader_iter = iter(valid_loader)
-            inputs_val, targets_val = next(valid_loader_iter)
-        inputs_val, targets_val = inputs_val.to(device), targets_val.to(device)
-        with torch.no_grad():
-            outputs_teacher_val = teacher(inputs_val)
-        outputs_val_student = meta_model(inputs_val)
-        
-        hard_loss, soft_loss = kd_loss_fn(outputs_val_student, outputs_teacher_val, targets_val, args)
-        if args.l_meta == 'mix':
-            l_g_meta = torch.mean(hard_loss + soft_loss)  # l_g_meta = hard_loss + soft_loss
-        elif args.l_meta == 'hard':
-            l_g_meta = torch.mean(hard_loss)  # l_g_meta = hard_loss
-        else: # args.l_meta == 'soft'
-            l_g_meta = torch.mean(soft_loss)  # l_g_meta = soft_loss
-
-        vnet_learner.optimizer_vnet.zero_grad()
-        l_g_meta.backward()
-        vnet_learner.optimizer_vnet.step()
-
-        # Step 2: Main model update
-        outputs_student = model(inputs)
-        v_lambda, hard_loss, soft_loss = vnet_learner(outputs_student, outputs_teacher, targets, epoch, no_grad=True)           
-
-        w_hard = v_lambda[:, 0:1]
-        w_soft = v_lambda[:, 1:2]
-        loss = torch.sum(w_hard * hard_loss.unsqueeze(1) + w_soft * soft_loss.unsqueeze(1)) / w_hard.size(0)
-
-        optimizer_model.zero_grad()
-        loss.backward()
-        optimizer_model.step()
-
-
-        prec_meta = accuracy(outputs_val_student.data, targets_val.data, topk=(1,))[0]
-        prec_train = accuracy(outputs_student.data, targets.data, topk=(1,))[0]
-
-        train_loss += loss.item()
-        meta_loss += l_g_meta.item()
-
-        total_prec_train += prec_train.item()
-        total_prec_meta += prec_meta.item()
-
-        if (batch_idx + 1) % args.print_freq == 0:
-            print('Epoch: [%d/%d]\t'
-                  'Iters: [%d/%d]\t'
-                  'Loss: %.4f\t'
-                  'MetaLoss:%.4f\t'
-                  'Prec@1 %.2f\t'
-                  'Prec_meta@1 %.2f' % (
-                      (epoch + 1), args.epochs, batch_idx + 1, len(train_loader.dataset)/args.batch_size,
-                      train_loss / (batch_idx + 1), meta_loss / (batch_idx + 1), prec_train, prec_meta))
-            
-        n_batches = batch_idx + 1
-
-    if args.scheduler_vnet:
-        scheduler_vnet.step(meta_loss / n_batches)
-
-    log = {'train': {'loss_train': float(train_loss / n_batches), 'acc_train': float(total_prec_train / n_batches), 'loss_meta': float(meta_loss / n_batches), 'acc_meta': float(total_prec_meta / n_batches)}}
-    # save log to json file
-    with open(args.name_file_log, 'r+') as f:
-        data = json.load(f)
-        data[str(epoch + 1)] = log
-        f.seek(0)
-        json.dump(data, f, indent=4)
-        f.truncate()
+def build_vnet():
+    if args.input_vnet == 'logits_teacher':
+        # vnet = VNet(args.n_classes, [200, 100], 2).to(device)  # input=100 (features), output=2 (weight cho mỗi loss)
+        vnet = VNet(args.n_classes, args.hidden_vnet, 2)
+    elif args.input_vnet == 'feature_teacher':
+        vnet = VNet(512, args.hidden_vnet, 2)
+    elif args.input_vnet == 'ce_student':
+        vnet = VNet(1, args.hidden_vnet, 2)
+    elif args.input_vnet == 'logit_st+ce_student':
+        vnet = VNet(3, args.hidden_vnet, 2)
+    else:
+        vnet = VNet(2, args.hidden_vnet, 2)
+        # if args.input_vnet == 'loss' or args.input_vnet == 'logit_st' or args.input_vnet == 'loss_ce':
+        # vnet = VNet(2, [200, 100], 2).to(device)  # input=2 (hard/soft loss), output=2 (weight cho mỗi loss)
+    return vnet.to(device)
 
 def main():
     # Set up logging
@@ -192,21 +105,7 @@ def main():
         train_loader, valid_loader, test_loader = build_dataset(args=args)
     model = build_student()
     teacher = load_teacher(args)
-
-    if args.input_vnet == 'logits_teacher':
-        # vnet = VNet(args.n_classes, [200, 100], 2).to(device)  # input=100 (features), output=2 (weight cho mỗi loss)
-        vnet = VNet(args.n_classes, args.hidden_vnet, 2).to(device)
-    elif args.input_vnet == 'feature_teacher':
-        vnet = VNet(512, args.hidden_vnet, 2).to(device)
-    elif args.input_vnet == 'ce_student':
-        vnet = VNet(1, args.hidden_vnet, 2).to(device)
-    elif args.input_vnet == 'logit_st+ce_student':
-        vnet = VNet(3, args.hidden_vnet, 2).to(device)
-    else:
-        vnet = VNet(2, args.hidden_vnet, 2).to(device)
-        # if args.input_vnet == 'loss' or args.input_vnet == 'logit_st' or args.input_vnet == 'loss_ce':
-        # vnet = VNet(2, [200, 100], 2).to(device)  # input=2 (hard/soft loss), output=2 (weight cho mỗi loss)
-
+    vnet = build_vnet()
 
     optimizer_model = torch.optim.SGD(model.params(), args.lr,
                                       momentum=args.momentum, weight_decay=args.weight_decay)
@@ -229,7 +128,7 @@ def main():
             }, f'ckpt_epoch{epoch}_before_lr_decay.pth')
 
         adjust_learning_rate(optimizer_model, epoch, args, optimizer_vnet)
-        train(train_loader, valid_loader, model, teacher, vnet_learner, optimizer_model, scheduler_vnet, epoch)
+        train(train_loader, valid_loader, model, teacher, vnet_learner, optimizer_model, scheduler_vnet, epoch, args)
         test_acc = test(model, test_loader, epoch, args)
 
         if test_acc >= best_acc:
