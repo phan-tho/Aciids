@@ -63,6 +63,8 @@ args.seed = 12
 args.n_classes = 10 if args.dataset == 'cifar10' else 100
 torch.manual_seed(args.seed)
 
+with open('log/args.json', 'w') as f:
+    json.dump(vars(args), f, indent=4)
 
 def build_student():
     return newresnet.meta_resnet8x4(num_classes=args.n_classes).to(device)
@@ -216,6 +218,16 @@ def main():
     best_acc = 0
     at_e = 0
     for epoch in range(args.epochs):
+        if epoch == args.lr_decay_epoch[0]:
+            # save state dict, optimizer of current model to continual training
+            torch.save({
+                'epoch': epoch + 1,
+                'model_state_dict': model.state_dict(),
+                'optimizer_model_state_dict': optimizer_model.state_dict(),
+                'vnet_state_dict': vnet.state_dict(),
+                'optimizer_vnet_state_dict': optimizer_vnet.state_dict(),
+            }, f'ckpt_epoch{epoch}_before_lr_decay.pth')
+
         adjust_learning_rate(optimizer_model, epoch, args, optimizer_vnet)
         train(train_loader, valid_loader, model, teacher, vnet_learner, optimizer_model, scheduler_vnet, epoch)
         test_acc = test(model, test_loader, epoch, args)

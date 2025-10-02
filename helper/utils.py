@@ -75,7 +75,10 @@ def accuracy(output, target, topk=(1,)):
 def adjust_learning_rate(optimizer, epoch, args, optimizer_vnet=None):
     # if model is not None. load state dict best currently model at epoch in lr_decay_epoch
     # lr = args.lr * ((0.1 ** int(epoch >= 80)) * (0.1 ** int(epoch >= 100)))
-
+    if optimizer_vnet is not None and epoch == 80:
+        from collections import defaultdict
+        optimizer_vnet.state = defaultdict(dict)
+    
     for e in args.lr_decay_epoch:
         if epoch == e:
             args.lr *= 0.1
@@ -83,8 +86,3 @@ def adjust_learning_rate(optimizer, epoch, args, optimizer_vnet=None):
                 param_group['lr'] *= 0.1
             for param_group in optimizer_vnet.param_groups:
                 param_group['lr'] *= 0.8
-
-    # if optimizer_vnet is not None and args.scheduler_vnet == False:
-    #     if epoch == 200:
-    #         for param_group in optimizer_vnet.param_groups:
-    #             param_group['lr'] *= 0.1
