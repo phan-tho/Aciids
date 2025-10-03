@@ -116,7 +116,7 @@ def test(model, test_loader, epoch, args):
     test_loss = 0
     with torch.no_grad():
         for inputs, targets in test_loader:
-            inputs, targets = inputs.to(args.args.device), targets.to(args.args.device)
+            inputs, targets = inputs.to(args.device), targets.to(args.device)
             outputs = model(inputs)
             test_loss += F.cross_entropy(outputs, targets).item()
             _, predicted = outputs.max(1)
@@ -156,12 +156,12 @@ def load_teacher(args):
     # model = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar10_resnet32", pretrained=True)
     model = teachernet.resnet32x4(num_classes=10 if args.dataset == 'cifar10' else 100)
     try:
-        ckt = torch.load(args.teacher_ckpt, map_location=args.args.device)
+        ckt = torch.load(args.teacher_ckpt, map_location=args.device)
         model.load_state_dict(ckt['net'])
         print('load teacher acc', ckt['acc@1'])
     except Exception as e:
         print('Error loading teacher model:', e)
-    model.to(args.args.device)
+    model.to(args.device)
     return model
 
 def accuracy(output, target, topk=(1,)):
