@@ -14,8 +14,13 @@ def train(train_loader, valid_loader, model, teacher, vnet_learner, optimizer_mo
 
     total_prec_train = 0
     total_prec_meta = 0
-
     n_batches = 0
+
+
+    vnet_accum_steps = 20
+    vnet_step_counter = 0
+    vnet_learner.optimizer_vnet.zero_grad()
+
 
     for batch_idx, (inputs, targets) in enumerate(train_loader):
         model.train()
@@ -23,7 +28,7 @@ def train(train_loader, valid_loader, model, teacher, vnet_learner, optimizer_mo
         with torch.no_grad():
             outputs_teacher = teacher(inputs)
 
-        # Step 1: Meta-model (for meta-update) 
+        # Step 1: Meta-model (for meta-update)
         meta_model = newresnet.meta_resnet8x4(num_classes=args.n_classes).to(args.device)
         meta_model.load_state_dict(model.state_dict())
         meta_model.to(args.device)
@@ -32,8 +37,8 @@ def train(train_loader, valid_loader, model, teacher, vnet_learner, optimizer_mo
 
         v_lambda, hard_loss, soft_loss = vnet_learner(outputs_student, outputs_teacher, targets, epoch)
 
-        w_hard = v_lambda[:, 0:1] # shape (batch_size, 1)
-        w_soft = v_lambda[:, 1:2] # shape (batch_size, 1)
+        w_hard = v_lambda[:, 0:1]  # (B,1)
+        w_soft = v_lambda[:, 1:2]  # (B,1)
         l_f_meta = torch.sum(w_hard * hard_loss.unsqueeze(1) + w_soft * soft_loss.unsqueeze(1)) / w_hard.size(0)
 
         meta_model.zero_grad()
@@ -43,30 +48,32 @@ def train(train_loader, valid_loader, model, teacher, vnet_learner, optimizer_mo
 
         try:
             inputs_val, targets_val = next(valid_loader_iter)
-            # shape inputs_val: (batch_size, 3, 32, 32), targets_val: (batch_size)
         except StopIteration:
             valid_loader_iter = iter(valid_loader)
             inputs_val, targets_val = next(valid_loader_iter)
+
         inputs_val, targets_val = inputs_val.to(args.device), targets_val.to(args.device)
         with torch.no_grad():
             outputs_teacher_val = teacher(inputs_val)
         outputs_val_student = meta_model(inputs_val)
-        
+
         hard_loss, soft_loss = kd_loss_fn(outputs_val_student, outputs_teacher_val, targets_val, args)
         if args.l_meta == 'mix':
-            l_g_meta = torch.mean(hard_loss + soft_loss)  # l_g_meta = hard_loss + soft_loss
+            l_g_meta = torch.mean(hard_loss + soft_loss)
         elif args.l_meta == 'hard':
-            l_g_meta = torch.mean(hard_loss)  # l_g_meta = hard_loss
-        else: # args.l_meta == 'soft'
-            l_g_meta = torch.mean(soft_loss)  # l_g_meta = soft_loss
+            l_g_meta = torch.mean(hard_loss)
+        else:
+            l_g_meta = torch.mean(soft_loss)
 
-        vnet_learner.optimizer_vnet.zero_grad()
-        l_g_meta.backward()
-        vnet_learner.optimizer_vnet.step()
+        vnet_step_counter += 1
+        (l_g_meta / vnet_accum_steps).backward()       
 
-        # Step 2: Main model update
+        if (vnet_step_counter % vnet_accum_steps) == 0:
+            vnet_learner.optimizer_vnet.step()
+            vnet_learner.optimizer_vnet.zero_grad()
+
         outputs_student = model(inputs)
-        v_lambda, hard_loss, soft_loss = vnet_learner(outputs_student, outputs_teacher, targets, epoch, no_grad=True)           
+        v_lambda, hard_loss, soft_loss = vnet_learner(outputs_student, outputs_teacher, targets, epoch, no_grad=True)
 
         w_hard = v_lambda[:, 0:1]
         w_soft = v_lambda[:, 1:2]
@@ -76,13 +83,12 @@ def train(train_loader, valid_loader, model, teacher, vnet_learner, optimizer_mo
         loss.backward()
         optimizer_model.step()
 
-
+        # Metrics
         prec_meta = accuracy(outputs_val_student.data, targets_val.data, topk=(1,))[0]
         prec_train = accuracy(outputs_student.data, targets.data, topk=(1,))[0]
 
         train_loss += loss.item()
         meta_loss += l_g_meta.item()
-
         total_prec_train += prec_train.item()
         total_prec_meta += prec_meta.item()
 
@@ -93,22 +99,25 @@ def train(train_loader, valid_loader, model, teacher, vnet_learner, optimizer_mo
                   'MetaLoss:%.4f\t'
                   'Prec@1 %.2f\t'
                   'Prec_meta@1 %.2f' % (
-                      (epoch + 1), args.epochs, batch_idx + 1, len(train_loader.dataset)/args.batch_size,
-                      train_loss / (batch_idx + 1), meta_loss / (batch_idx + 1), prec_train, prec_meta))
-            
+                    (epoch + 1), args.epochs, batch_idx + 1, len(train_loader.dataset)/args.batch_size,
+                    train_loss / (batch_idx + 1), meta_loss / (batch_idx + 1), prec_train, prec_meta))
+
         n_batches = batch_idx + 1
 
     if args.scheduler_vnet:
         scheduler_vnet.step(meta_loss / n_batches)
 
-    log = {'train': {'loss_train': float(train_loss / n_batches), 'acc_train': float(total_prec_train / n_batches), 'loss_meta': float(meta_loss / n_batches), 'acc_meta': float(total_prec_meta / n_batches)}}
-    # save log to json file
+    log = {'train': {'loss_train': float(train_loss / n_batches),
+                     'acc_train': float(total_prec_train / n_batches),
+                     'loss_meta': float(meta_loss / n_batches),
+                     'acc_meta': float(total_prec_meta / n_batches)}}
     with open(args.name_file_log, 'r+') as f:
         data = json.load(f)
         data[str(epoch + 1)] = log
         f.seek(0)
         json.dump(data, f, indent=4)
         f.truncate()
+
 
 def test(model, test_loader, epoch, args):
     model.eval()
@@ -178,7 +187,7 @@ def accuracy(output, target, topk=(1,)):
 
 def adjust_learning_rate(optimizer, epoch, args, optimizer_vnet=None):
     # if model is not None. load state dict best currently model at epoch in lr_decay_epoch
-    # lr = args.lr * ((0.1 ** int(epoch >= 80)) * (0.1 ** int(epoch >= 100)))
+    # lr = args.lr * ((0.1 * int(epoch >= 80)) * (0.1 * int(epoch >= 100)))
     if optimizer_vnet is not None and epoch == 80:
         from collections import defaultdict
         optimizer_vnet.state = defaultdict(dict)
