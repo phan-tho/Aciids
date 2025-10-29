@@ -136,13 +136,13 @@ def test(model, test_loader, epoch, args):
         test_loss, correct, len(test_loader.dataset), acc))
 
     # save test loss and acc to json file
-    log = {'loss_test': float(test_loss), 'acc_test': float(acc)}
-    with open(args.name_file_log, 'r+') as f:
-        data = json.load(f)
-        data[str(epoch + 1)]['test'] = log
-        f.seek(0)
-        json.dump(data, f, indent=4)
-        f.truncate()
+    # log = {'loss_test': float(test_loss), 'acc_test': float(acc)}
+    # with open(args.name_file_log, 'r+') as f:
+    #     data = json.load(f)
+    #     data[str(epoch + 1)]['test'] = log
+    #     f.seek(0)
+    #     json.dump(data, f, indent=4)
+    #     f.truncate()
 
     return acc
 
@@ -188,9 +188,9 @@ def accuracy(output, target, topk=(1,)):
 def adjust_learning_rate(optimizer, epoch, args, optimizer_vnet=None):
     # if model is not None. load state dict best currently model at epoch in lr_decay_epoch
     # lr = args.lr * ((0.1 * int(epoch >= 80)) * (0.1 * int(epoch >= 100)))
-    if optimizer_vnet is not None and epoch == 80:
-        from collections import defaultdict
-        optimizer_vnet.state = defaultdict(dict)
+    # if optimizer_vnet is not None and epoch == 80:
+    #     from collections import defaultdict
+    #     optimizer_vnet.state = defaultdict(dict)
     
     for e in args.lr_decay_epoch:
         if epoch == e:
