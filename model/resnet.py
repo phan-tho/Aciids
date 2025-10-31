@@ -350,36 +350,25 @@ class TeacherResNet32(nn.Module):
 # meta model to reweight the loss
 
 class VNet(MetaModule):
-    def __init__(self, input, hidden, output):
-        # hidden is an array of hidden layer sizes
+    def __init__(self, input=2, hidden=[64, 64], output=2):
         super(VNet, self).__init__()
         if not isinstance(hidden, list):
             hidden = [int(hidden)]
 
         self.deep = len(hidden)
         hidden.append(output)
-        
-        self.linear1 = MetaLinear(input, hidden[0]) 
+
+        self.linear1 = MetaLinear(input, hidden[0])
         self.relu1 = nn.ReLU(inplace=True)
         for i in range(1, self.deep + 1):
             setattr(self, f'linear{i+1}', MetaLinear(hidden[i-1], hidden[i]))
-            setattr(self, f'relu{i+1}', nn.ReLU(inplace=True))
-
+            if i != self.deep:  # only add relu for hidden layers
+                setattr(self, f'relu{i+1}', nn.ReLU(inplace=True))
 
     def forward(self, x):
-        # torch.stack([hard_loss, soft_loss], dim=1) 
-        for i in range(1, self.deep + 2):
+        for i in range(1, self.deep + 1):
             x = getattr(self, f'linear{i}')(x)
             x = getattr(self, f'relu{i}')(x)
-            x = F.dropout(x, p=0.2, training=True)
-
-        # x: shape (batch, 2)
-        # return F.softmax(x, dim=1)
-
-        # return F.softmax(x, dim=1) * F.sigmoid(x.sum(dim=1, keepdim=True))
+        x = getattr(self, f'linear{self.deep + 1}')(x)
+    
         return F.sigmoid(x)
-
-        # w = torch.ones_like(x, requires_grad=False)
-        # w[:, 0] = w[:, 0] * 0.2
-        # w[:, 1] = w[:, 1] * 0.8
-        # return w * F.sigmoid(x.sum(dim=1, keepdim=True))
