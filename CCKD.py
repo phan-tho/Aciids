@@ -9,18 +9,7 @@ import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader, Dataset
-from tqdm import tqdm
-
-# --- Giả định: Model của bạn được import từ file resnet.py ---
-# Hãy đảm bảo bạn có file resnet.py với 2 kiến trúc này
-try:
-    from resnet import resnet32x4, resnet8x4
-except ImportError:
-    print("LỖI: Không tìm thấy file resnet.py hoặc các model resnet32x4, resnet8x4.")
-    print("Vui lòng tạo file resnet.py chứa các định nghĩa model.")
-    exit()
-# -----------------------------------------------------------
-
+from model.teachernet import resnet32x4, resnet8x4
 
 def get_img_num_per_cls(dataset, num_classes, imb_factor):
     """
@@ -65,8 +54,6 @@ class ImbalancedCIFAR(Dataset):
 
         # Lấy số lượng mẫu mỗi lớp
         self.cls_num_list = get_img_num_per_cls(dataset_name, self.num_classes, imb_factor)
-        print(f"Phân phối lớp (mất cân bằng, imb_factor={imb_factor}):")
-        print(self.cls_num_list)
 
         # Lấy chỉ số cho mỗi lớp
         targets_np = np.array(base_dataset.targets, dtype=np.int64)
@@ -106,18 +93,16 @@ def get_teacher_prior(model_teacher, val_loader, num_classes, device):
     Tính toán prior của teacher p^t(y)[cite: 219, 220].
     Đây là kỳ vọng của p^t(y|x) trên một validation set *cân bằng*.
     """
-    print("Đang tính toán prior của teacher p^t(y) trên val set cân bằng...")
     model_teacher.eval()
     all_preds = []
 
-    for inputs, _ in tqdm(val_loader, desc="Teacher Prior"):
+    for inputs, _ in val_loader:
         inputs = inputs.to(device)
         outputs = model_teacher(inputs)
         all_preds.append(F.softmax(outputs, dim=1))
 
     # Tính trung bình softmax trên toàn bộ dataset [cite: 220]
     p_t_y = torch.cat(all_preds, dim=0).mean(dim=0)
-    print("Tính toán p^t(y) hoàn tất.")
     return p_t_y.detach()
 
 
@@ -163,8 +148,8 @@ def parse_args():
     parser.add_argument('--dataset', type=str, default='cifar10',
                         choices=['cifar10', 'cifar100'],
                         help='Dataset (cifar10 hoặc cifar100)')
-    parser.add_argument('--imb_factor', type=float, default=0.1,
-                        help='Tỷ lệ mất cân bằng (vd: 0.01 -> 100)')
+    parser.add_argument('--imb_factor', type=float, default=10,
+                        help='Tỷ lệ mất cân bằng')
     parser.add_argument('--lr', type=float, default=0.1, help='Learning rate')
     parser.add_argument('--epoch', type=int, default=200, help='Số epochs')
     parser.add_argument('--lr_decay_epoch', type=str, default='160,180',
@@ -200,8 +185,7 @@ def train_one_epoch(model_student, model_teacher, train_loader, optimizer,
     total_loss_sup = 0
     total_loss_kd = 0
 
-    pbar = tqdm(train_loader, desc="Training Epoch")
-    for inputs, targets in pbar:
+    for inputs, targets in train_loader:
         inputs, targets = inputs.to(device), targets.to(device)
 
         # Forward
@@ -227,10 +211,6 @@ def train_one_epoch(model_student, model_teacher, train_loader, optimizer,
         total_loss += loss.item()
         total_loss_sup += loss_sup.item()
         total_loss_kd += loss_kd.item()
-
-        pbar.set_postfix(loss=f"{loss.item():.3f}",
-                         sup=f"{loss_sup.item():.3f}",
-                         kd=f"{loss_kd.item():.3f}")
 
     avg_loss = total_loss / len(train_loader)
     avg_loss_sup = total_loss_sup / len(train_loader)
@@ -333,13 +313,8 @@ def main():
     model_student = resnet8x4(num_classes=num_classes).to(device)
     model_teacher = resnet32x4(num_classes=num_classes).to(device)
 
-    if not os.path.exists(args.teacher_ckpt_path):
-        print(f"LỖI: Không tìm thấy checkpoint của teacher tại: {args.teacher_ckpt_path}")
-        return
-
-    print(f"Đang load checkpoint của teacher từ: {args.teacher_ckpt_path}")
-    model_teacher.load_state_dict(torch.load(args.teacher_ckpt_path,
-                                             map_location=device))
+    ckpt = torch.load(args.teacher_ckpt_path, map_location=device)
+    model_teacher.load_state_dict(ckpt['net'])
     model_teacher.eval()
 
     # 4. Tính p^t(y) (Teacher Prior) [cite: 219]

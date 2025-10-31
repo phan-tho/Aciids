@@ -349,26 +349,53 @@ class TeacherResNet32(nn.Module):
 
 # meta model to reweight the loss
 
+# class VNet(MetaModule):
+#     def __init__(self, input=2, hidden=[64, 64], output=2):
+#         super(VNet, self).__init__()
+#         if not isinstance(hidden, list):
+#             hidden = [int(hidden)]
+
+#         self.deep = len(hidden)
+#         hidden.append(output)
+
+#         self.linear1 = MetaLinear(input, hidden[0])
+#         self.relu1 = nn.ReLU(inplace=True)
+#         for i in range(1, self.deep + 1):
+#             setattr(self, f'linear{i+1}', MetaLinear(hidden[i-1], hidden[i]))
+#             if i != self.deep:  # only add relu for hidden layers
+#                 setattr(self, f'relu{i+1}', nn.ReLU(inplace=True))
+
+#     def forward(self, x):
+#         for i in range(1, self.deep + 1):
+#             x = getattr(self, f'linear{i}')(x)
+#             x = getattr(self, f'relu{i}')(x)
+#         x = getattr(self, f'linear{self.deep + 1}')(x)
+    
+#         return F.sigmoid(x)
+        # use soft plus to ensure the weights are positive
+        # return F.softplus(x)
+        # return x
+
 class VNet(MetaModule):
     def __init__(self, input=2, hidden=[64, 64], output=2):
         super(VNet, self).__init__()
         if not isinstance(hidden, list):
-            hidden = [int(hidden)]
+            hidden = [int(hidden), int(hidden)]
+        elif len(hidden) == 1:
+            hidden = [int(hidden[0]), int(hidden[0])]
+        else:
+            hidden = [int(hidden[0]), int(hidden[1])]
 
-        self.deep = len(hidden)
-        hidden.append(output)
+        h1, h2 = hidden[0], hidden[1]
 
-        self.linear1 = MetaLinear(input, hidden[0])
-        self.relu1 = nn.ReLU(inplace=True)
-        for i in range(1, self.deep + 1):
-            setattr(self, f'linear{i+1}', MetaLinear(hidden[i-1], hidden[i]))
-            if i != self.deep:  # only add relu for hidden layers
-                setattr(self, f'relu{i+1}', nn.ReLU(inplace=True))
+        self.fc1 = MetaLinear(input, h1)
+        self.act1 = nn.Tanh()
+        self.fc2 = MetaLinear(h1, h2)
+        self.act2 = nn.Tanh()
+        self.fc3 = MetaLinear(h2, output)
 
     def forward(self, x):
-        for i in range(1, self.deep + 1):
-            x = getattr(self, f'linear{i}')(x)
-            x = getattr(self, f'relu{i}')(x)
-        x = getattr(self, f'linear{self.deep + 1}')(x)
-    
-        return F.sigmoid(x)
+        x = self.act1(self.fc1(x))  
+        x = self.act2(self.fc2(x))   
+        x = torch.sigmoid(self.fc3(x))  
+        return x
